@@ -12,11 +12,11 @@ from app.librarian.librarians import (
 class TestLibrarianRegistry:
     def test_cat_exists(self):
         assert CAT.id == "cat"
-        assert "소설" in CAT.genres
+        assert "장르" in CAT.role
 
     def test_stork_exists(self):
         assert STORK.id == "stork"
-        assert "미스터리" in STORK.genres
+        assert "날씨" in STORK.role
 
     def test_registry_has_two_entries(self):
         assert len(LIBRARIAN_REGISTRY) == 2
@@ -41,6 +41,5 @@ class TestLibrarianRegistry:
         assert other.id == "cat"
 
     def test_get_other_librarian_unknown(self):
-        # 존재하지 않는 id면 첫 번째 사서를 반환 (레지스트리에서 자기 아닌 것)
         other = get_other_librarian("unknown")
         assert other is not None

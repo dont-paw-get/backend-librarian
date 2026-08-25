@@ -78,7 +78,7 @@ async def handle_chat(
         "recommended_genres": recommended_genres,
         "current_librarian": {
             "id": current_librarian.id if current_librarian else request.librarian_id,
-            "genres": current_librarian.genres if current_librarian else [],
+            "specialties": current_librarian.specialties if current_librarian else [],
         },
     }
 
@@ -96,7 +96,7 @@ async def handle_chat(
             id=other_librarian.id,
             name=other_librarian.name,
             icon=other_librarian.icon,
-            genres=other_librarian.genres,
+            genres=other_librarian.specialties,
         )
 
     # 8. 메모리 업데이트

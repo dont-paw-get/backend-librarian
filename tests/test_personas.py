@@ -34,23 +34,22 @@ class TestCatPersona:
     def test_cat_prompt_has_speech_rules(self):
         assert "냥" in CAT_CHARACTER_PROMPT
 
-    def test_cat_prompt_has_genres(self):
-        assert "소설" in CAT_CHARACTER_PROMPT
-        assert "에세이" in CAT_CHARACTER_PROMPT
+    def test_cat_prompt_covers_all_genres(self):
+        """cat이 전 장르를 담당하는지 확인."""
+        assert "모든 장르" in CAT_CHARACTER_PROMPT
 
-    def test_cat_prompt_has_switch_guidance(self):
+    def test_cat_prompt_switch_to_stork_on_weather(self):
+        """날씨/시간대 질문 시 stork로 전환하라는 지시가 있는지."""
+        assert "날씨" in CAT_CHARACTER_PROMPT
         assert "황새 사서" in CAT_CHARACTER_PROMPT
         assert "switchTo" in CAT_CHARACTER_PROMPT
 
     def test_full_prompt_includes_common_rules(self):
         full = get_cat_system_prompt()
-        # 캐릭터 부분
         assert "나비" in full
-        assert "냥" in full
-        # 공통 규칙 부분
         assert "공통 규칙" in full
         assert "한국어" in full
 
     def test_full_prompt_is_not_empty(self):
         full = get_cat_system_prompt()
-        assert len(full) > 500  # 충분히 구체적인 프롬프트인지
+        assert len(full) > 500

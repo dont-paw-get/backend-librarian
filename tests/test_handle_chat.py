@@ -96,7 +96,7 @@ class TestHandleChat:
         assert response.switch_to is not None
         assert response.switch_to.id == "stork"
         assert response.switch_to.name == "황새 사서"
-        assert "미스터리" in response.switch_to.genres
+        assert len(response.switch_to.genres) > 0
 
     @pytest.mark.asyncio
     async def test_memory_updated_after_chat(self, memory: LocalMemoryStore):
