@@ -21,6 +21,7 @@ import asyncio
 import json
 import os
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +36,7 @@ from app.librarian.tools.weather import OpenMeteoProvider
 _USE_BEDROCK = os.environ.get("USE_BEDROCK", "").lower() in ("true", "1", "yes")
 
 if _USE_BEDROCK:
-    from app.librarian.bedrock_agent import bedrock_cat_agent, bedrock_stork_agent
+    from app.librarian.bedrock_agent import bedrock_cat_agent, bedrock_stork_agent, check_bedrock_access
 
     _AGENT_MAP = {"cat": bedrock_cat_agent, "stork": bedrock_stork_agent}
     _mode = "bedrock"
@@ -44,15 +45,34 @@ else:
 
     _AGENT_MAP = {"cat": fake_cat_agent, "stork": fake_stork_agent}
     _mode = "mock"
+    check_bedrock_access = None
 
 # 스트리밍 청크 크기 및 간격 (타이핑 효과)
 _STREAM_CHUNK_SIZE = 12
 _STREAM_DELAY_SECONDS = 0.02
 
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    """시작 시 Bedrock 자격증명 상태를 점검해 로그로 알립니다."""
+    if _USE_BEDROCK and check_bedrock_access is not None:
+        ok, detail = check_bedrock_access()
+        if ok:
+            print(f"[librarian] Bedrock 준비 완료 — {detail}")
+        else:
+            print(f"[librarian] Bedrock 사용 불가 — {detail}")
+            print("[librarian] MFA 세션 발급 후 재시작하세요:")
+            print("[librarian]   uv run python scripts/mfa_session.py <MFA코드>")
+            print("[librarian]   USE_BEDROCK=true AWS_PROFILE=mfa uv run uvicorn app.librarian.server:app --reload")
+    else:
+        print("[librarian] mock 모드로 실행 중입니다 (Bedrock 미사용).")
+    yield
+
+
 app = FastAPI(
     title="Don't Paw-get Your Book — Librarian API",
     description=f"사서 에이전트 API (mode: {_mode})",
     version="0.4.0",
+    lifespan=_lifespan,
 )
 
 # CORS — 프론트 로컬 개발 서버 허용

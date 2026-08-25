@@ -40,6 +40,9 @@ def build_cat_agent(model=None, tools: list | None = None) -> Agent:
     kwargs: dict = {
         "system_prompt": get_cat_system_prompt(),
         "model": model if model is not None else _create_model(),
+        # 기본 콜백 핸들러는 응답을 stdout에 출력합니다.
+        # Windows 콘솔(cp949)에서 이모지 인코딩 오류가 발생하므로 비활성화합니다.
+        "callback_handler": None,
     }
     if tools:
         kwargs["tools"] = tools
@@ -51,6 +54,7 @@ def build_stork_agent(model=None, tools: list | None = None) -> Agent:
     kwargs: dict = {
         "system_prompt": get_stork_system_prompt(),
         "model": model if model is not None else _create_model(),
+        "callback_handler": None,
     }
     if tools:
         kwargs["tools"] = tools

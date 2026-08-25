@@ -69,6 +69,42 @@ def _build_prompt(message: str, context: dict) -> str:
     return message
 
 
+def check_bedrock_access() -> tuple[bool, str]:
+    """Bedrock 호출이 가능한지 확인합니다.
+
+    Returns:
+        (성공 여부, 상세 메시지)
+    """
+    import boto3
+    from botocore.exceptions import ClientError, NoCredentialsError
+
+    from app.librarian.agent import _resolve_model_id, _resolve_region
+
+    model_id = _resolve_model_id()
+    region = _resolve_region()
+
+    try:
+        boto3.client("bedrock-runtime", region_name=region).converse(
+            modelId=model_id,
+            messages=[{"role": "user", "content": [{"text": "ping"}]}],
+            inferenceConfig={"maxTokens": 8},
+        )
+        return True, f"{region} / {model_id}"
+    except NoCredentialsError:
+        return False, "AWS 자격증명을 찾을 수 없습니다."
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code == "AccessDeniedException":
+            return False, "AccessDenied — MFA 세션 자격증명이 필요합니다."
+        if code == "ExpiredTokenException":
+            return False, "세션이 만료되었습니다. MFA 세션을 재발급하세요."
+        if code in ("ValidationException", "ResourceNotFoundException"):
+            return False, f"{code} — 모델 ID/리전 확인 필요 ({region} / {model_id})"
+        return False, f"{code}"
+    except Exception as e:  # noqa: BLE001
+        return False, f"{type(e).__name__}: {e}"
+
+
 def _log_agent_failure(librarian_id: str, error: Exception) -> None:
     """에이전트 호출 실패를 로깅하고, 흔한 원인에 대한 힌트를 남깁니다."""
     logger.error(f"Bedrock {librarian_id} agent 호출 실패: {error}")
