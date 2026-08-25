@@ -68,10 +68,10 @@ class TestChatEndpoint:
 
     @pytest.mark.asyncio
     async def test_chat_missing_fields(self, client: AsyncClient):
-        """필수 필드 누락 → 422."""
+        """message만 보내도 기본값으로 정상 동작."""
         payload = {"message": "안녕"}
         resp = await client.post("/chat", json=payload)
-        assert resp.status_code == 422
+        assert resp.status_code == 200
 
     @pytest.mark.asyncio
     async def test_chat_response_schema(self, client: AsyncClient):
@@ -83,14 +83,64 @@ class TestChatEndpoint:
         }
         resp = await client.post("/chat", json=payload)
         data = resp.json()
-        # text는 반드시 존재
+        # discovery 호환 필드 + librarian 고유 필드가 모두 존재
         assert isinstance(data["text"], str)
+        assert data["message"] == data["text"]
+        assert data["session_id"] == "test-sess-004"
+        assert data["librarian_id"] == "cat"
         # switch_to는 null 또는 올바른 구조
         if data.get("switch_to"):
             assert "id" in data["switch_to"]
             assert "name" in data["switch_to"]
             assert "icon" in data["switch_to"]
             assert "genres" in data["switch_to"]
+
+    @pytest.mark.asyncio
+    async def test_session_id_auto_generated(self, client: AsyncClient):
+        """session_id 미전달 시 서버가 자동 발급."""
+        resp = await client.post("/chat", json={"message": "안녕"})
+        data = resp.json()
+        assert data["session_id"]
+
+    @pytest.mark.asyncio
+    async def test_api_v1_path(self, client: AsyncClient):
+        """/api/v1/chat 경로도 동일하게 동작."""
+        resp = await client.post(
+            "/api/v1/chat",
+            json={"message": "책 추천해줘", "librarian_id": "stork", "session_id": "v1-sess"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["librarian_id"] == "stork"
+        assert data["session_id"] == "v1-sess"
+
+    @pytest.mark.asyncio
+    async def test_streaming_response(self, client: AsyncClient):
+        """stream=true면 text/plain 스트리밍 + 세션 헤더."""
+        resp = await client.post(
+            "/api/v1/chat",
+            json={"message": "책 추천해줘", "session_id": "stream-sess", "stream": True},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/plain")
+        assert resp.headers["x-session-id"] == "stream-sess"
+        assert len(resp.text) > 0
+
+    @pytest.mark.asyncio
+    async def test_streaming_switch_to_header(self, client: AsyncClient):
+        """switchTo 발생 시 X-Switch-To 헤더로 전달."""
+        resp = await client.post(
+            "/api/v1/chat",
+            json={
+                "message": "미스터리 소설 추천해줘",
+                "librarian_id": "cat",
+                "session_id": "stream-switch",
+                "stream": True,
+            },
+        )
+        assert resp.status_code == 200
+        assert "x-switch-to" in resp.headers
+        assert "stork" in resp.headers["x-switch-to"]
 
     @pytest.mark.asyncio
     async def test_session_memory_persists(self, client: AsyncClient):

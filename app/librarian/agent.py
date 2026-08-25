@@ -1,33 +1,61 @@
-"""Strands Agent 빌더 (모델 주입식).
+"""Strands Agent 빌더 — Bedrock 모델 연동.
 
-모델을 외부에서 주입받아 테스트에서는 fake, 프로덕션에서는 Bedrock을 사용합니다.
+librarian_id에 따라 적절한 페르소나와 도구를 조합한 Strands Agent를 생성합니다.
+
+모델/리전은 환경변수로 재정의할 수 있습니다.
+    BEDROCK_MODEL_ID, AWS_REGION
 """
 
+import os
+
 from strands import Agent
+from strands.models import BedrockModel
 
 from app.librarian.personas.cat import get_cat_system_prompt
+from app.librarian.personas.stork import get_stork_system_prompt
+
+# 교육 계정(ap-northeast-2)에서 호출 가능한 것으로 확인된 조합
+DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+DEFAULT_REGION = "ap-northeast-2"
+
+
+def _resolve_model_id(model_id: str | None = None) -> str:
+    return model_id or os.environ.get("BEDROCK_MODEL_ID") or DEFAULT_MODEL_ID
+
+
+def _resolve_region(region: str | None = None) -> str:
+    return region or os.environ.get("AWS_REGION") or DEFAULT_REGION
+
+
+def _create_model(model_id: str | None = None, region: str | None = None) -> BedrockModel:
+    """Bedrock 모델 인스턴스를 생성합니다."""
+    return BedrockModel(
+        model_id=_resolve_model_id(model_id),
+        region_name=_resolve_region(region),
+    )
 
 
 def build_cat_agent(model=None, tools: list | None = None) -> Agent:
-    """cat 사서 에이전트를 생성합니다.
-
-    Args:
-        model: Strands 모델 인스턴스 (None이면 기본 Bedrock 사용 시도)
-        tools: 에이전트에 부여할 도구 목록
-
-    Returns:
-        구성된 Strands Agent
-    """
-    system_prompt = get_cat_system_prompt()
-
+    """cat 사서 에이전트를 생성합니다."""
     kwargs: dict = {
-        "system_prompt": system_prompt,
+        "system_prompt": get_cat_system_prompt(),
+        "model": model if model is not None else _create_model(),
+        # 기본 콜백 핸들러는 응답을 stdout에 출력합니다.
+        # Windows 콘솔(cp949)에서 이모지 인코딩 오류가 발생하므로 비활성화합니다.
+        "callback_handler": None,
     }
-
-    if model is not None:
-        kwargs["model"] = model
-
     if tools:
         kwargs["tools"] = tools
+    return Agent(**kwargs)
 
+
+def build_stork_agent(model=None, tools: list | None = None) -> Agent:
+    """stork 사서 에이전트를 생성합니다."""
+    kwargs: dict = {
+        "system_prompt": get_stork_system_prompt(),
+        "model": model if model is not None else _create_model(),
+        "callback_handler": None,
+    }
+    if tools:
+        kwargs["tools"] = tools
     return Agent(**kwargs)

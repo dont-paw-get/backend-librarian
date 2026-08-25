@@ -50,27 +50,47 @@ class TestChatRequest:
 
 class TestChatResponse:
     def test_text_only_response(self):
-        resp = ChatResponse(text="좋은 책을 추천해줄게냥! 📚")
+        text = "좋은 책을 추천해줄게냥! 📚"
+        resp = ChatResponse(message=text, session_id="sess-1", text=text)
         assert resp.switch_to is None
 
+    def test_discovery_compatible_fields(self):
+        """discovery 계약(message/session_id)과 text가 함께 제공됨."""
+        text = "오늘은 에세이가 좋다냥 📖"
+        resp = ChatResponse(message=text, session_id="sess-2", text=text)
+        assert resp.message == resp.text
+        assert resp.session_id == "sess-2"
+        assert resp.librarian_id == "cat"
+
     def test_response_with_switch_to(self):
+        text = "이건 황새 사서가 더 잘 알아냥~"
         resp = ChatResponse(
-            text="이건 황새 사서가 더 잘 알아냥~",
+            message=text,
+            session_id="sess-3",
+            text=text,
             switch_to=SwitchTo(id="stork", name="황새 사서", icon="🪿", genres=["미스터리"]),
         )
         assert resp.switch_to is not None
         assert resp.switch_to.id == "stork"
 
     def test_serialization_to_dict(self):
-        resp = ChatResponse(text="안녕냥!")
+        text = "안녕냥!"
+        resp = ChatResponse(message=text, session_id="sess-4", text=text)
         data = resp.model_dump(exclude_none=True)
-        assert "text" in data
+        assert data["text"] == text
+        assert data["message"] == text
+        assert data["session_id"] == "sess-4"
         assert "switch_to" not in data
 
     def test_serialization_with_switch_to(self):
+        text = "넘길게냥~"
         resp = ChatResponse(
-            text="넘길게냥~",
+            message=text,
+            session_id="sess-5",
+            text=text,
+            librarian_id="cat",
             switch_to=SwitchTo(id="stork", name="황새 사서", icon="🪿", genres=["SF"]),
         )
         data = resp.model_dump()
         assert data["switch_to"]["id"] == "stork"
+        assert data["librarian_id"] == "cat"
