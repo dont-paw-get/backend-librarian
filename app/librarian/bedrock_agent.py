@@ -30,15 +30,23 @@ def _get_stork_agent():
     return _stork_agent
 
 
-def _build_prompt(message: str, context: dict) -> str:
+def _build_prompt(message: str, context: dict, librarian_id: str = "cat") -> str:
     """사용자 메시지와 컨텍스트를 결합한 프롬프트를 생성합니다."""
     parts = []
 
-    # 날씨 정보
+    # 날씨 정보 — stork는 날씨를 강조
     weather = context.get("weather", {})
     if weather.get("condition"):
         temp_str = f", 기온 {weather['temperature']}°C" if weather.get("temperature") else ""
-        parts.append(f"[현재 날씨: {weather.get('description', weather['condition'])}{temp_str}]")
+        desc = weather.get("description", weather["condition"])
+        if librarian_id == "stork":
+            parts.append(
+                f"[현재 날씨 정보 — 이 정보를 반드시 활용해 추천해주세요]\n"
+                f"  날씨: {desc}{temp_str}\n"
+                f"  이 날씨에 어울리는 분위기와 연결해 책을 추천해주세요."
+            )
+        else:
+            parts.append(f"[현재 날씨: {desc}{temp_str}]")
 
     # 무드 정보
     mood = context.get("mood")
@@ -146,7 +154,7 @@ async def bedrock_cat_agent(message: str, context: dict) -> str:
         LLM 생성 응답 텍스트
     """
     agent = _get_cat_agent()
-    prompt = _build_prompt(message, context)
+    prompt = _build_prompt(message, context, librarian_id="cat")
 
     try:
         result = agent(prompt)
@@ -167,7 +175,7 @@ async def bedrock_stork_agent(message: str, context: dict) -> str:
         LLM 생성 응답 텍스트
     """
     agent = _get_stork_agent()
-    prompt = _build_prompt(message, context)
+    prompt = _build_prompt(message, context, librarian_id="stork")
 
     try:
         result = agent(prompt)

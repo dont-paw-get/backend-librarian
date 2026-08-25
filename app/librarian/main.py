@@ -44,11 +44,19 @@ async def handle_chat(
     # 2. 메모리에서 맥락 조회
     session_ctx = await memory.get_context(session_id)
 
-    # 3. 날씨 조회 (위치 정보가 있을 경우)
+    # 3. 날씨 조회 (위치 정보가 있을 경우, 또는 stork 사서면 기본 위치 사용)
     weather_result: WeatherResult | None = None
-    if weather_provider and request.latitude is not None and request.longitude is not None:
+    latitude = request.latitude
+    longitude = request.longitude
+
+    # stork 사서인데 위치 정보가 없으면 기본 위치(서울) 사용
+    if request.librarian_id == "stork" and latitude is None:
+        latitude = 37.5665
+        longitude = 126.9780
+
+    if weather_provider and latitude is not None and longitude is not None:
         try:
-            weather_result = await weather_provider.get_weather(request.latitude, request.longitude)
+            weather_result = await weather_provider.get_weather(latitude, longitude)
         except Exception:
             # 날씨 조회 실패해도 대화는 계속
             weather_result = None
