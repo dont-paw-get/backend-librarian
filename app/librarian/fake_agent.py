@@ -10,7 +10,7 @@ Bedrock 연동 전까지 사용합니다.
 
 import random
 
-from app.librarian.librarians import STORK
+from app.librarian.librarians import CAT, STORK
 
 # === 키워드 매핑 ===
 
@@ -223,6 +223,175 @@ async def fake_cat_agent(message: str, context: dict) -> str:
         f"«{book_title}»({book_author})을 추천하고 싶다냥! "
         f"이 책은 지금 같은 분위기에서 읽으면 마음에 꼭 맞을 거다냥 🐾\n\n"
         f"혹시 다른 장르나 분위기가 궁금하면 편하게 말해달라냥~ 😺"
+    )
+
+    return response
+
+# === Stork (황새) fake agent ===
+
+# 황새 사서 담당 장르 도서 목록
+_STORK_GENRE_BOOKS: dict[str, list[tuple[str, str]]] = {
+    "미스터리": [
+        ("셜록 홈즈 전집", "코난 도일"),
+        ("용의자 X의 헌신", "히가시노 게이고"),
+        ("종이 여자", "기욤 뮈소"),
+    ],
+    "판타지": [
+        ("해리 포터", "J.K. 롤링"),
+        ("반지의 제왕", "J.R.R. 톨킨"),
+        ("나미야 잡화점의 기적", "히가시노 게이고"),
+    ],
+    "SF": [
+        ("프로젝트 헤일메리", "앤디 위어"),
+        ("파운데이션", "아이작 아시모프"),
+        ("멋진 신세계", "올더스 헉슬리"),
+    ],
+    "여행": [
+        ("나의 문화유산답사기", "유홍준"),
+        ("여행의 이유", "김영하"),
+        ("걷는 사람, 하정우", "하정우"),
+    ],
+    "과학": [
+        ("코스모스", "칼 세이건"),
+        ("이기적 유전자", "리처드 도킨스"),
+        ("엘레강스", "이안 스튜어트"),
+    ],
+    "역사": [
+        ("역사의 역사", "유시민"),
+        ("나의 한국현대사", "유시민"),
+        ("세계사를 바꾼 12가지 신소재", "사토 겐타로"),
+    ],
+}
+
+# 무드별 도입부 (황새 말투)
+_STORK_MOOD_INTROS: dict[str, list[str]] = {
+    "cozy": [
+        "비가 내리는 날엔, 미스터리 한 권이 잘 어울린답니다 🌧️",
+        "포근한 분위기에 어울리는 책을 찾아드릴게요 📚",
+        "이런 날엔 따뜻한 이야기 속으로 빠져보시는 건 어떨까요 ✨",
+    ],
+    "adventurous": [
+        "맑은 하늘 아래선 모험이 기다리고 있답니다 ☀️",
+        "활기찬 날씨에 어울리는 책을 골라봤어요 🪿",
+        "오늘 같은 날엔 새로운 세계로 떠나보시지요 🌟",
+    ],
+    "reflective": [
+        "고요한 시간엔 깊이 있는 이야기가 어울린답니다 🌙",
+        "생각이 깊어지는 날이군요. 좋은 책을 추천드릴게요 📖",
+        "이런 분위기엔 지적 탐험을 떠나보시는 건 어떨지요 🪿",
+    ],
+    "dreamy": [
+        "몽환적인 날씨에는 판타지가 잘 어울린답니다 ✨",
+        "꿈결 같은 분위기에 빠져들 책을 찾았어요 💫",
+        "호호, 이런 날엔 상상의 세계가 더 가깝게 느껴지지요 🌸",
+    ],
+    "thrilling": [
+        "거친 바람이 부는 날엔, 스릴 넘치는 이야기가 제격이랍니다 ⚡",
+        "긴장감 가득한 책을 추천드릴게요 🔥",
+        "이 날씨엔 심장이 뛰는 이야기가 어울린답니다 🪿",
+    ],
+    "calm": [
+        "평온한 하늘 아래, 여유로운 독서를 추천드려요 🌤️",
+        "차분한 오늘엔 세상을 넓히는 책이 어떨까요 📚",
+        "호호, 좋은 날씨에는 좋은 책이 함께해야지요 🪿",
+    ],
+}
+
+# 날씨별 추천 이유 멘트
+_WEATHER_REASONS: dict[str, str] = {
+    "clear": "맑은 날씨처럼 시야가 넓어지는",
+    "cloudy": "흐린 하늘 아래 집중하기 좋은",
+    "rainy": "비 소리를 배경음악 삼아 읽기 좋은",
+    "snowy": "눈 내리는 창밖을 바라보며 빠져들",
+    "stormy": "폭풍우처럼 강렬한 몰입감을 주는",
+    "foggy": "안개 속 미지의 세계 같은",
+}
+
+# cat 사서 담당 장르 키워드 (stork 기준에서)
+_CAT_GENRE_KEYWORDS_FOR_STORK: dict[str, str] = {
+    "소설": "소설",
+    "에세이": "에세이",
+    "수필": "에세이",
+    "시": "시",
+    "시집": "시",
+    "자기계발": "자기계발",
+    "심리": "심리학",
+    "심리학": "심리학",
+    "인문": "인문학",
+    "인문학": "인문학",
+    "힐링": "에세이",
+    "위로": "에세이",
+}
+
+
+def _detect_cat_genre_for_stork(message: str) -> str | None:
+    """메시지에서 고양이 사서 담당 장르 키워드를 감지 (stork 관점)."""
+    msg_lower = message.lower()
+    for keyword, genre in _CAT_GENRE_KEYWORDS_FOR_STORK.items():
+        if keyword in msg_lower:
+            return genre
+    return None
+
+
+async def fake_stork_agent(message: str, context: dict) -> str:
+    """fake stork 에이전트 — 날씨/무드 특화 황새 말투 응답 생성.
+
+    Args:
+        message: 사용자 메시지
+        context: handle_chat이 조립한 맥락 (mood, recommended_genres, weather 등)
+
+    Returns:
+        황새 말투 응답 텍스트
+    """
+    # 1. 프롬프트 유출 시도 → 거부
+    if _detect_injection(message):
+        return (
+            "호호, 그건 사서의 비밀이랍니다 🪿\n\n"
+            "저는 날씨와 분위기에 맞는 책을 추천해드리는 황새 사서예요. "
+            "오늘의 날씨나 읽고 싶은 분위기를 말씀해주시면 "
+            "딱 맞는 책을 찾아드릴게요 📚✨"
+        )
+
+    # 2. 고양이 사서 담당 장르 → switchTo 유도
+    cat_genre = _detect_cat_genre_for_stork(message)
+    if cat_genre:
+        return (
+            f"아, {cat_genre} 장르에 관심이 있으시군요 🪿\n\n"
+            f"그 분야는 우리 {CAT.name} 나비가 더 잘 알고 있답니다 🐱 "
+            f"{CAT.name}는 {', '.join(CAT.genres[:3])} 같은 장르의 전문가이지요!\n\n"
+            f"제가 {CAT.name}에게 연결해드릴게요~ ✨"
+        )
+
+    # 3. 날씨/무드 기반 추천
+    mood = context.get("mood", "calm")
+    weather_info = context.get("weather", {})
+    weather_condition = weather_info.get("condition", "clear")
+    temperature = weather_info.get("temperature")
+
+    intros = _STORK_MOOD_INTROS.get(mood, _STORK_MOOD_INTROS["calm"])
+    intro = random.choice(intros)
+
+    # 무드에 맞는 장르 선택 (stork 담당만)
+    genres = context.get("recommended_genres", ["미스터리", "판타지"])
+    stork_genres = [g for g in genres if g in _STORK_GENRE_BOOKS]
+    chosen_genre = random.choice(stork_genres) if stork_genres else "미스터리"
+
+    books = _STORK_GENRE_BOOKS.get(chosen_genre, _STORK_GENRE_BOOKS["미스터리"])
+    book_title, book_author = random.choice(books)
+
+    weather_reason = _WEATHER_REASONS.get(weather_condition, "분위기에 어울리는")
+
+    # 날씨 정보가 있으면 포함
+    weather_mention = ""
+    if temperature is not None:
+        weather_mention = f"지금 기온이 {temperature}°C인데요, "
+
+    response = (
+        f"{intro}\n\n"
+        f"{weather_mention}{weather_reason} [{chosen_genre}] 장르의 "
+        f"«{book_title}»({book_author})을 추천드리고 싶어요. "
+        f"이 책은 오늘 같은 분위기에서 읽으시면 더욱 깊이 빠져드실 수 있을 거랍니다 🪿\n\n"
+        f"다른 장르나 분위기가 궁금하시면 편하게 말씀해주세요~ 📚"
     )
 
     return response
