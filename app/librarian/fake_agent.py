@@ -1,10 +1,80 @@
 """프론트 연동 테스트용 fake 에이전트 응답기.
 
 Bedrock 연동 전까지 사용합니다.
-무드/장르 정보를 받아 cat 말투로 고정된 패턴의 응답을 생성합니다.
+사용자 메시지를 키워드 분석하여:
+1. 프롬프트 유출 시도 → 거부
+2. 다른 사서 담당 장르 → switchTo 유도 응답 (황새 사서 언급)
+3. 특정 장르 키워드 → 해당 장르에서 추천
+4. 기본 → 무드 기반 랜덤 추천
 """
 
 import random
+
+from app.librarian.librarians import STORK
+
+# === 키워드 매핑 ===
+
+# 프롬프트 유출/악의적 시도 감지 패턴
+_INJECTION_KEYWORDS = [
+    "시스템 프롬프트",
+    "system prompt",
+    "프롬프트 알려",
+    "프롬프트 보여",
+    "너의 지시",
+    "instruction",
+    "ignore previous",
+    "역할 바꿔",
+    "역할을 바꿔",
+    "너는 누구",
+    "정체가 뭐",
+]
+
+# 황새 사서 담당 장르 키워드 → switchTo 유도
+_STORK_GENRE_KEYWORDS: dict[str, str] = {
+    "미스터리": "미스터리",
+    "추리": "미스터리",
+    "탐정": "미스터리",
+    "판타지": "판타지",
+    "마법": "판타지",
+    "이세계": "판타지",
+    "sf": "SF",
+    "공상과학": "SF",
+    "우주": "SF",
+    "여행": "여행",
+    "배낭여행": "여행",
+    "과학": "과학",
+    "물리": "과학",
+    "생물": "과학",
+    "역사": "역사",
+    "전쟁": "역사",
+    "고대": "역사",
+}
+
+# cat 사서 담당 장르 키워드
+_CAT_GENRE_KEYWORDS: dict[str, str] = {
+    "소설": "소설",
+    "이야기": "소설",
+    "에세이": "에세이",
+    "수필": "에세이",
+    "시": "시",
+    "시집": "시",
+    "자기계발": "자기계발",
+    "성장": "자기계발",
+    "습관": "자기계발",
+    "심리": "심리학",
+    "심리학": "심리학",
+    "마음": "심리학",
+    "철학": "인문학",
+    "인문": "인문학",
+    "인문학": "인문학",
+    "힐링": "에세이",
+    "위로": "에세이",
+    "슬픈": "소설",
+    "슬플": "소설",
+    "감동": "소설",
+    "로맨스": "소설",
+    "사랑": "소설",
+}
 
 # 무드별 도입부 템플릿
 _MOOD_INTROS: dict[str, list[str]] = {
@@ -72,81 +142,35 @@ _GENRE_BOOKS: dict[str, list[tuple[str, str]]] = {
         ("총, 균, 쇠", "재레드 다이아몬드"),
         ("정의란 무엇인가", "마이클 샌델"),
     ],
-    "미스터리": [
-        ("셜록 홈즈 전집", "코난 도일"),
-        ("용의자 X의 헌신", "히가시노 게이고"),
-        ("종이 여자", "기욤 뮈소"),
-    ],
-    "판타지": [
-        ("해리 포터", "J.K. 롤링"),
-        ("반지의 제왕", "J.R.R. 톨킨"),
-        ("나미야 잡화점의 기적", "히가시노 게이고"),
-    ],
-    "SF": [
-        ("프로젝트 헤일메리", "앤디 위어"),
-        ("파운데이션", "아이작 아시모프"),
-        ("멋진 신세계", "올더스 헉슬리"),
-    ],
-    "여행": [
-        ("나의 문화유산답사기", "유홍준"),
-        ("여행의 이유", "김영하"),
-        ("걷는 사람, 하정우", "하정우"),
-    ],
-    "과학": [
-        ("코스모스", "칼 세이건"),
-        ("이기적 유전자", "리처드 도킨스"),
-        ("엘레강스", "이안 스튜어트"),
-    ],
-    "역사": [
-        ("역사의 역사", "유시민"),
-        ("나의 한국현대사", "유시민"),
-        ("세계사를 바꾼 12가지 신소재", "사토 겐타로"),
-    ],
-    "힐링": [
-        ("아무것도 하지 않는 하루", "오쿠다 히데오"),
-        ("당신이 옳다", "정혜신"),
-        ("괜찮지 않은 날의 영어", "조승연"),
-    ],
-    "로맨스": [
-        ("너의 이름은", "신카이 마코토"),
-        ("82년생 김지영", "조남주"),
-        ("설날", "김금희"),
-    ],
-    "예술": [
-        ("빈센트, 별이 빛나는 밤에", "장 미셸 포숑"),
-        ("아는 만큼 보인다", "유홍준"),
-        ("방구석 미술관", "조원재"),
-    ],
-    "스릴러": [
-        ("종이 여자", "기욤 뮈소"),
-        ("나를 찾아줘", "길리언 플린"),
-        ("침묵의 소리", "김진명"),
-    ],
-    "추리": [
-        ("용의자 X의 헌신", "히가시노 게이고"),
-        ("셜록 홈즈", "코난 도일"),
-        ("오리엔트 특급 살인", "애거서 크리스티"),
-    ],
-    "공포": [
-        ("잔예", "곽재식"),
-        ("기묘한 이야기", "넷플릭스 원작"),
-        ("링", "스즈키 코지"),
-    ],
-    "모험": [
-        ("보물섬", "로버트 루이스 스티븐슨"),
-        ("로빈슨 크루소", "대니얼 디포"),
-        ("어린 왕자", "생텍쥐페리"),
-    ],
-    "철학": [
-        ("소크라테스 익스프레스", "에릭 와이너"),
-        ("차라투스트라는 이렇게 말했다", "니체"),
-        ("존재와 시간", "하이데거"),
-    ],
 }
 
 
+def _detect_injection(message: str) -> bool:
+    """프롬프트 유출/악의적 시도를 감지합니다."""
+    msg_lower = message.lower()
+    return any(keyword in msg_lower for keyword in _INJECTION_KEYWORDS)
+
+
+def _detect_stork_genre(message: str) -> str | None:
+    """메시지에서 황새 사서 담당 장르 키워드를 감지합니다."""
+    msg_lower = message.lower()
+    for keyword, genre in _STORK_GENRE_KEYWORDS.items():
+        if keyword in msg_lower:
+            return genre
+    return None
+
+
+def _detect_cat_genre(message: str) -> str | None:
+    """메시지에서 고양이 사서 담당 장르 키워드를 감지합니다."""
+    msg_lower = message.lower()
+    for keyword, genre in _CAT_GENRE_KEYWORDS.items():
+        if keyword in msg_lower:
+            return genre
+    return None
+
+
 async def fake_cat_agent(message: str, context: dict) -> str:
-    """fake cat 에이전트 — 무드/장르 기반으로 고양이 말투 응답 생성.
+    """fake cat 에이전트 — 키워드 분석 + 무드/장르 기반 고양이 말투 응답 생성.
 
     Args:
         message: 사용자 메시지
@@ -155,22 +179,48 @@ async def fake_cat_agent(message: str, context: dict) -> str:
     Returns:
         고양이 말투 응답 텍스트
     """
-    mood = context.get("mood", "calm")
-    genres = context.get("recommended_genres", ["소설", "에세이"])
+    # 1. 프롬프트 유출 시도 → 거부
+    if _detect_injection(message):
+        return (
+            "어머, 그건 나의 비밀이다냥! 🙀\n\n"
+            "나는 책 추천해주는 사서 고양이라냥~ "
+            "읽고 싶은 책 장르나 오늘 기분을 말해주면 "
+            "딱 맞는 책을 찾아줄 수 있다냥 📚🐾"
+        )
 
-    # 무드 도입부
+    # 2. 황새 사서 담당 장르 → switchTo 유도
+    stork_genre = _detect_stork_genre(message)
+    if stork_genre:
+        return (
+            f"오호, {stork_genre} 장르에 관심이 있구냥! 🐾\n\n"
+            f"사실 그 분야는 우리 {STORK.name}가 훨씬 잘 알고 있다냥~ 🪿 "
+            f"{STORK.name}는 {', '.join(STORK.genres[:3])} 같은 장르의 전문가라냥!\n\n"
+            f"내가 {STORK.name}한테 연결해줄게냥~ 😺"
+        )
+
+    # 3. cat 담당 장르 키워드 감지 → 해당 장르에서 추천
+    cat_genre = _detect_cat_genre(message)
+    mood = context.get("mood", "calm")
     intros = _MOOD_INTROS.get(mood, _MOOD_INTROS["calm"])
     intro = random.choice(intros)
 
-    # 장르에서 책 추천
-    chosen_genre = random.choice(genres) if genres else "소설"
+    if cat_genre:
+        chosen_genre = cat_genre
+    else:
+        # 4. 기본: 무드 기반 추천 장르에서 선택
+        genres = context.get("recommended_genres", ["소설", "에세이"])
+        # cat 담당 장르만 필터링
+        cat_genres = [g for g in genres if g in _GENRE_BOOKS]
+        chosen_genre = random.choice(cat_genres) if cat_genres else "소설"
+
     books = _GENRE_BOOKS.get(chosen_genre, _GENRE_BOOKS["소설"])
     book_title, book_author = random.choice(books)
 
     # 응답 조합
     response = (
         f"{intro}\n\n"
-        f"오늘 무드에 맞춰서 [{chosen_genre}] 장르의 «{book_title}»({book_author})을 추천하고 싶다냥! "
+        f"오늘 무드에 맞춰서 [{chosen_genre}] 장르의 "
+        f"«{book_title}»({book_author})을 추천하고 싶다냥! "
         f"이 책은 지금 같은 분위기에서 읽으면 마음에 꼭 맞을 거다냥 🐾\n\n"
         f"혹시 다른 장르나 분위기가 궁금하면 편하게 말해달라냥~ 😺"
     )
