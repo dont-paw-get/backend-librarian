@@ -11,6 +11,7 @@
 """
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from app.librarian.curation.mood import WeatherCondition, recommend_genres
 from app.librarian.librarians import get_librarian, get_other_librarian
@@ -37,10 +38,13 @@ async def handle_chat(
     Returns:
         ChatResponse (text + optional switchTo)
     """
-    # 1. 메모리에서 맥락 조회
-    session_ctx = await memory.get_context(request.session_id)
+    # 1. 세션 ID 자동 생성 (프론트에서 안 보낸 경우)
+    session_id = request.session_id or str(uuid4())
 
-    # 2. 날씨 조회 (위치 정보가 있을 경우)
+    # 2. 메모리에서 맥락 조회
+    session_ctx = await memory.get_context(session_id)
+
+    # 3. 날씨 조회 (위치 정보가 있을 경우)
     weather_result: WeatherResult | None = None
     if weather_provider and request.latitude is not None and request.longitude is not None:
         try:
@@ -98,12 +102,18 @@ async def handle_chat(
     # 8. 메모리 업데이트
     timestamp = now.isoformat()
     await memory.append_conversation(
-        request.session_id,
+        session_id,
         ConversationEntry(role="user", content=request.message, timestamp=timestamp),
     )
     await memory.append_conversation(
-        request.session_id,
+        session_id,
         ConversationEntry(role="assistant", content=response_text, timestamp=timestamp),
     )
 
-    return ChatResponse(text=response_text, switch_to=switch_to)
+    return ChatResponse(
+        message=response_text,
+        session_id=session_id,
+        text=response_text,
+        librarian_id=request.librarian_id,
+        switch_to=switch_to,
+    )

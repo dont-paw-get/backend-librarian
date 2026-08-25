@@ -69,6 +69,25 @@ def _build_prompt(message: str, context: dict) -> str:
     return message
 
 
+def _log_agent_failure(librarian_id: str, error: Exception) -> None:
+    """에이전트 호출 실패를 로깅하고, 흔한 원인에 대한 힌트를 남깁니다."""
+    logger.error(f"Bedrock {librarian_id} agent 호출 실패: {error}")
+
+    message = str(error)
+    if "AccessDenied" in message or "not authorized" in message:
+        logger.error(
+            "→ MFA 세션 자격증명이 없을 수 있습니다. "
+            "eval $(uv run python scripts/mfa_session.py <MFA코드>) 실행 후 서버를 재시작하세요."
+        )
+    elif "ValidationException" in message or "ResourceNotFound" in message:
+        logger.error(
+            "→ 모델 ID가 현재 리전에서 유효하지 않을 수 있습니다. "
+            "BEDROCK_MODEL_ID / AWS_REGION 환경변수를 확인하세요."
+        )
+    elif "ExpiredToken" in message:
+        logger.error("→ MFA 세션이 만료되었습니다. 세션을 다시 발급하세요.")
+
+
 def _strip_thinking(text: str) -> str:
     """모델 응답에서 <thinking> 블록을 제거합니다."""
     # 완결된 thinking 블록 제거
@@ -95,11 +114,9 @@ async def bedrock_cat_agent(message: str, context: dict) -> str:
 
     try:
         result = agent(prompt)
-        response_text = str(result)
-        response_text = _strip_thinking(response_text)
-        return response_text
+        return _strip_thinking(str(result))
     except Exception as e:
-        logger.error(f"Bedrock cat agent 호출 실패: {e}")
+        _log_agent_failure("cat", e)
         return "미안하다냥, 지금 잠시 생각이 안 나는 거 같다냥... 🙀 다시 물어봐줄 수 있다냥?"
 
 
@@ -118,9 +135,7 @@ async def bedrock_stork_agent(message: str, context: dict) -> str:
 
     try:
         result = agent(prompt)
-        response_text = str(result)
-        response_text = _strip_thinking(response_text)
-        return response_text
+        return _strip_thinking(str(result))
     except Exception as e:
-        logger.error(f"Bedrock stork agent 호출 실패: {e}")
+        _log_agent_failure("stork", e)
         return "죄송합니다, 잠시 생각을 정리하고 있어요 🪿 다시 말씀해주시겠어요?"

@@ -1,19 +1,30 @@
-"""프론트 연동용 로컬 API 서버.
+"""사서 에이전트 HTTP 서버.
+
+오케스트레이터(backend-discovery) 및 프론트와의 계약:
+- POST /api/v1/chat (별칭: /chat)
+- 요청: {message, session_id?, librarian_id?, stream?, latitude?, longitude?}
+- 응답(stream=false): {message, session_id, text, librarian_id, switch_to?}
+- 응답(stream=true): text/plain 스트리밍 + X-Session-Id / X-Switch-To 헤더
 
 USE_BEDROCK=true 환경변수로 실제 Bedrock 에이전트와 fake 에이전트를 전환합니다.
 
 실행:
-    # fake 모드 (기본)
+    # fake 모드 (기본, AWS 불필요)
     uv run uvicorn app.librarian.server:app --reload
 
-    # Bedrock 모드
+    # Bedrock 모드 (MFA 세션 자격증명 필요)
+    eval $(uv run python scripts/mfa_session.py <MFA코드>)
     USE_BEDROCK=true uv run uvicorn app.librarian.server:app --reload
 """
 
+import asyncio
+import json
 import os
+from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from app.librarian.main import handle_chat
 from app.librarian.memory.local import LocalMemoryStore
@@ -34,10 +45,14 @@ else:
     _AGENT_MAP = {"cat": fake_cat_agent, "stork": fake_stork_agent}
     _mode = "mock"
 
+# 스트리밍 청크 크기 및 간격 (타이핑 효과)
+_STREAM_CHUNK_SIZE = 12
+_STREAM_DELAY_SECONDS = 0.02
+
 app = FastAPI(
     title="Don't Paw-get Your Book — Librarian API",
     description=f"사서 에이전트 API (mode: {_mode})",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 # CORS — 프론트 로컬 개발 서버 허용
@@ -47,6 +62,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Switch-To"],
 )
 
 # 싱글턴 인스턴스
@@ -54,9 +70,8 @@ _memory = LocalMemoryStore(max_history=50)
 _weather = OpenMeteoProvider()
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest) -> ChatResponse:
-    """사서와 대화합니다."""
+async def _run_chat(request: ChatRequest) -> ChatResponse:
+    """librarian_id에 맞는 에이전트로 오케스트레이션을 실행합니다."""
     agent = _AGENT_MAP.get(request.librarian_id, _AGENT_MAP["cat"])
     return await handle_chat(
         request=request,
@@ -66,19 +81,58 @@ async def chat(request: ChatRequest) -> ChatResponse:
     )
 
 
-@app.post("/api/v1/chat", response_model=ChatResponse)
-async def chat_v1(request: ChatRequest) -> ChatResponse:
-    """/chat과 동일 — 프론트/오케스트레이터 경로 컨벤션(/api/v1/) 대응."""
-    return await chat(request)
+async def _stream_text(text: str) -> AsyncIterator[str]:
+    """완성된 텍스트를 청크 단위로 흘려보냅니다 (타이핑 효과)."""
+    for start in range(0, len(text), _STREAM_CHUNK_SIZE):
+        yield text[start : start + _STREAM_CHUNK_SIZE]
+        await asyncio.sleep(_STREAM_DELAY_SECONDS)
 
 
-@app.get("/health")
-async def health():
-    """헬스체크 엔드포인트."""
-    return {"status": "ok", "mode": _mode}
+def _build_stream_headers(result: ChatResponse) -> dict[str, str]:
+    """스트리밍 응답에 실어 보낼 메타데이터 헤더를 만듭니다."""
+    headers = {
+        "X-Session-Id": result.session_id,
+        "X-Librarian-Id": result.librarian_id,
+    }
+    if result.switch_to:
+        # 헤더는 ASCII만 안전하므로 JSON을 ASCII 이스케이프로 직렬화
+        headers["X-Switch-To"] = json.dumps(result.switch_to.model_dump(), ensure_ascii=True)
+    return headers
+
+
+async def _chat_endpoint(request: ChatRequest):
+    """stream 플래그에 따라 JSON 또는 text/plain 스트리밍으로 응답합니다."""
+    result = await _run_chat(request)
+
+    if not request.stream:
+        return result
+
+    return StreamingResponse(
+        _stream_text(result.text),
+        media_type="text/plain; charset=utf-8",
+        headers=_build_stream_headers(result),
+    )
+
+
+@app.post("/api/v1/chat")
+async def chat_v1(request: ChatRequest):
+    """사서와 대화합니다 (오케스트레이터/프론트 표준 경로)."""
+    return await _chat_endpoint(request)
+
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    """/api/v1/chat 별칭 (prefix 없는 경로)."""
+    return await _chat_endpoint(request)
 
 
 @app.get("/api/v1/health")
 async def health_v1():
-    """헬스체크 — /api/v1/ 경로 별칭."""
-    return await health()
+    """헬스체크."""
+    return {"status": "ok", "mode": _mode}
+
+
+@app.get("/health")
+async def health():
+    """헬스체크 별칭."""
+    return {"status": "ok", "mode": _mode}
