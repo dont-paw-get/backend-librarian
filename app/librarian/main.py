@@ -21,7 +21,14 @@ from app.librarian.curation.mood import (
 )
 from app.librarian.librarians import get_librarian, get_other_librarian
 from app.librarian.memory.base import ConversationEntry, MemoryStore
-from app.librarian.schemas import ChatRequest, ChatResponse, Signals, SwitchTo, WeatherInfo
+from app.librarian.schemas import (
+    ChatRequest,
+    ChatResponse,
+    LocationSource,
+    Signals,
+    SwitchTo,
+    WeatherInfo,
+)
 from app.librarian.tools.weather import (
     WeatherProvider,
     WeatherResult,
@@ -58,31 +65,40 @@ async def handle_chat(
     # 2. 메모리에서 맥락 조회
     session_ctx = await memory.get_context(session_id)
 
-    # 3. 날씨 파악
+    # 3. 날씨 파악 (location_source로 이 날씨가 어디 기준인지 추적)
     weather_result: WeatherResult | None = None
+    location_source: LocationSource = "none"
     stated_condition = detect_weather_from_text(request.message)
 
     if stated_condition is not None:
-        # 3-1. 사용자가 메시지에 날씨를 직접 언급 → 우선 사용 (위치 불필요)
+        # 3-1. 사용자가 메시지에 날씨를 직접 언급 → 우선 사용 (위치 불필요, 기온 없음)
         weather_condition = stated_condition
+        location_source = "text_stated"
     else:
         # 3-2. 좌표가 유효하면 실제 날씨 조회. 범위 밖이면 무시하고 폴백.
         latitude = request.latitude
         longitude = request.longitude
-        if not is_valid_coordinates(latitude, longitude):
+        has_user_coords = is_valid_coordinates(latitude, longitude)
+        if not has_user_coords:
             latitude = longitude = None  # 유효하지 않은 좌표는 버림
 
-        # stork는 좌표가 없으면 서울 기본 위치 폴백
-        if request.librarian_id == "stork" and latitude is None:
+        if has_user_coords:
+            location_source = "user"
+        elif request.librarian_id == "stork":
+            # stork는 좌표가 없으면 서울 기본 위치로 폴백 (사용자 실제 위치 아님)
             latitude, longitude = _DEFAULT_LAT, _DEFAULT_LON
+            location_source = "default_seoul"
 
         if weather_provider and latitude is not None and longitude is not None:
             try:
                 weather_result = await weather_provider.get_weather(latitude, longitude)
             except Exception:
                 weather_result = None
+                location_source = "none"
 
         weather_condition = weather_result.condition if weather_result else WeatherCondition.CLEAR
+        if weather_result is None:
+            location_source = "none"
 
     # 4. 시간대·날씨 → 무드
     now = datetime.now(tz=timezone.utc)
@@ -98,6 +114,7 @@ async def handle_chat(
         condition=weather_condition.value,
         temperature=weather_result.temperature if weather_result else None,
         description=weather_result.description if weather_result else None,
+        location_source=location_source,
     )
     signals = Signals(
         weather=weather_info,

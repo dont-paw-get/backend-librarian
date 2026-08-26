@@ -253,3 +253,70 @@ class TestHandleChat:
         )
         assert spy.called_with == (37.5665, 126.9780)
         assert response.signals.weather.temperature == 20.0
+
+    @pytest.mark.asyncio
+    async def test_location_source_user(self, memory: LocalMemoryStore):
+        """실제 사용자 좌표로 조회하면 location_source='user'."""
+        weather = FakeWeatherProvider(temperature=20.0, condition="clear", description="맑음")
+        request = ChatRequest(
+            message="책 분위기 잡아줘",
+            librarian_id="cat",
+            session_id="sess-loc-user",
+            latitude=37.5665,
+            longitude=126.9780,
+        )
+        response = await handle_chat(
+            request=request, memory=memory, weather_provider=weather, agent_callable=fake_agent_normal
+        )
+        assert response.signals.weather.location_source == "user"
+
+    @pytest.mark.asyncio
+    async def test_location_source_default_seoul(self, memory: LocalMemoryStore):
+        """stork가 좌표 없이 서울 기본값을 쓰면 location_source='default_seoul'."""
+        weather = FakeWeatherProvider(temperature=20.0, condition="clear", description="맑음")
+        request = ChatRequest(
+            message="책 분위기 잡아줘",
+            librarian_id="stork",
+            session_id="sess-loc-default",
+        )
+        response = await handle_chat(
+            request=request, memory=memory, weather_provider=weather, agent_callable=fake_agent_normal
+        )
+        assert response.signals.weather.location_source == "default_seoul"
+
+    @pytest.mark.asyncio
+    async def test_location_source_text_stated(self, memory: LocalMemoryStore):
+        """메시지에 날씨를 직접 언급하면 location_source='text_stated', 기온 없음."""
+        request = ChatRequest(
+            message="비 오는 날 분위기 알려줘",
+            librarian_id="cat",
+            session_id="sess-loc-text",
+        )
+        response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
+        assert response.signals.weather.location_source == "text_stated"
+        assert response.signals.weather.temperature is None
+
+    @pytest.mark.asyncio
+    async def test_location_source_none_for_cat_without_coords(self, memory: LocalMemoryStore):
+        """cat이 좌표도 텍스트 날씨도 없으면 location_source='none'."""
+        request = ChatRequest(
+            message="오늘 뭐 읽을까",
+            librarian_id="cat",
+            session_id="sess-loc-none",
+        )
+        response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
+        assert response.signals.weather.location_source == "none"
+        assert response.signals.weather.temperature is None
+
+    @pytest.mark.asyncio
+    async def test_location_source_none_on_out_of_range_coords(self, memory: LocalMemoryStore):
+        """범위 밖 좌표는 무시되어 location_source='none' (cat 기준)."""
+        request = ChatRequest(
+            message="책 분위기 잡아줘",
+            librarian_id="cat",
+            session_id="sess-loc-invalid",
+            latitude=999.0,
+            longitude=999.0,
+        )
+        response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
+        assert response.signals.weather.location_source == "none"
