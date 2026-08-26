@@ -192,3 +192,64 @@ class TestHandleChat:
         )
         response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
         assert response.signals.genre_focus == "비즈니스"
+
+    @pytest.mark.asyncio
+    async def test_out_of_range_coords_ignored(self, memory: LocalMemoryStore):
+        """범위 밖 좌표는 무시하고 폴백 — 날씨 조회 없이 정상 응답."""
+
+        class SpyWeatherProvider:
+            def __init__(self):
+                self.called_with = None
+
+            async def get_weather(self, lat, lon):
+                self.called_with = (lat, lon)
+                from app.librarian.curation.mood import WeatherCondition
+                from app.librarian.tools.weather import WeatherResult
+
+                return WeatherResult(temperature=20.0, condition=WeatherCondition.CLEAR, description="맑음")
+
+        spy = SpyWeatherProvider()
+        request = ChatRequest(
+            message="책 분위기 잡아줘",
+            librarian_id="cat",
+            session_id="sess-bad-coords",
+            latitude=999.0,  # 범위 밖
+            longitude=999.0,  # 범위 밖
+        )
+        response = await handle_chat(
+            request=request, memory=memory, weather_provider=spy, agent_callable=fake_agent_normal
+        )
+        # cat은 좌표 없으면 날씨 조회 안 함 → provider 호출 안 됨
+        assert spy.called_with is None
+        # 앱은 정상 응답
+        assert response.text
+        assert response.signals.weather.temperature is None
+
+    @pytest.mark.asyncio
+    async def test_valid_coords_used(self, memory: LocalMemoryStore):
+        """유효한 좌표는 그대로 날씨 조회에 사용."""
+
+        class SpyWeatherProvider:
+            def __init__(self):
+                self.called_with = None
+
+            async def get_weather(self, lat, lon):
+                self.called_with = (lat, lon)
+                from app.librarian.curation.mood import WeatherCondition
+                from app.librarian.tools.weather import WeatherResult
+
+                return WeatherResult(temperature=20.0, condition=WeatherCondition.CLEAR, description="맑음")
+
+        spy = SpyWeatherProvider()
+        request = ChatRequest(
+            message="책 분위기 잡아줘",
+            librarian_id="cat",
+            session_id="sess-good-coords",
+            latitude=37.5665,
+            longitude=126.9780,
+        )
+        response = await handle_chat(
+            request=request, memory=memory, weather_provider=spy, agent_callable=fake_agent_normal
+        )
+        assert spy.called_with == (37.5665, 126.9780)
+        assert response.signals.weather.temperature == 20.0

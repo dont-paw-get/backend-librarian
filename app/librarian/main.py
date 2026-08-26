@@ -26,6 +26,7 @@ from app.librarian.tools.weather import (
     WeatherProvider,
     WeatherResult,
     detect_weather_from_text,
+    is_valid_coordinates,
 )
 
 # stork 사서 기본 위치 (서울) — 좌표/텍스트 날씨가 모두 없을 때 폴백
@@ -65,9 +66,13 @@ async def handle_chat(
         # 3-1. 사용자가 메시지에 날씨를 직접 언급 → 우선 사용 (위치 불필요)
         weather_condition = stated_condition
     else:
-        # 3-2. 좌표가 있으면 실제 날씨 조회 (stork는 좌표 없으면 서울 폴백)
+        # 3-2. 좌표가 유효하면 실제 날씨 조회. 범위 밖이면 무시하고 폴백.
         latitude = request.latitude
         longitude = request.longitude
+        if not is_valid_coordinates(latitude, longitude):
+            latitude = longitude = None  # 유효하지 않은 좌표는 버림
+
+        # stork는 좌표가 없으면 서울 기본 위치 폴백
         if request.librarian_id == "stork" and latitude is None:
             latitude, longitude = _DEFAULT_LAT, _DEFAULT_LON
 
