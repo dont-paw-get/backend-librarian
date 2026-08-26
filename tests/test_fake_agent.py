@@ -73,3 +73,9 @@ class TestFakeStorkAgent:
     async def test_uses_formal_speech(self):
         response = await fake_stork_agent("안녕하세요", {"mood": "calm"})
         assert any(e in response for e in ["랍니다", "습니다", "요", "지요"])
+
+    @pytest.mark.asyncio
+    async def test_uses_dudung_signature(self):
+        """stork는 '두둥' 시그니처를 사용."""
+        response = await fake_stork_agent("안녕하세요", {"mood": "calm"})
+        assert "두둥" in response

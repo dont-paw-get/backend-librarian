@@ -11,6 +11,9 @@ class TestStorkPersona:
     def test_stork_prompt_has_speech_rules(self):
         assert "랍니다" in STORK_CHARACTER_PROMPT
 
+    def test_stork_prompt_has_dudung_signature(self):
+        assert "두둥" in STORK_CHARACTER_PROMPT
+
     def test_stork_prompt_has_weather_focus(self):
         assert "날씨" in STORK_CHARACTER_PROMPT
         assert "시간대" in STORK_CHARACTER_PROMPT
