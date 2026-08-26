@@ -100,6 +100,16 @@ def detect_weather_from_text(message: str) -> WeatherCondition | None:
     return None
 
 
+def is_valid_coordinates(latitude: float | None, longitude: float | None) -> bool:
+    """좌표가 유효 범위(위도 -90~90, 경도 -180~180) 안에 있는지 확인합니다.
+
+    둘 중 하나라도 None이거나 범위 밖이면 False.
+    """
+    if latitude is None or longitude is None:
+        return False
+    return -90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0
+
+
 class OpenMeteoProvider(WeatherProvider):
     """Open-Meteo API 기반 날씨 조회 (무키, 무료)."""
 

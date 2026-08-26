@@ -3,8 +3,8 @@
 오케스트레이터(backend-discovery) 및 프론트와의 계약:
 - POST /api/v1/chat (별칭: /chat)
 - 요청: {message, session_id?, librarian_id?, stream?, latitude?, longitude?}
-- 응답(stream=false): {message, session_id, text, librarian_id, switch_to?}
-- 응답(stream=true): text/plain 스트리밍 + X-Session-Id / X-Switch-To 헤더
+- 응답(stream=false): {message, session_id, text, librarian_id, signals?, switch_to?}
+- 응답(stream=true): text/plain 스트리밍 + X-Session-Id / X-Librarian-Id / X-Signals / X-Switch-To 헤더
 
 USE_BEDROCK=true 환경변수로 실제 Bedrock 에이전트와 fake 에이전트를 전환합니다.
 
@@ -82,7 +82,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Switch-To"],
+    expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Signals", "X-Switch-To"],
 )
 
 # 싱글턴 인스턴스
@@ -109,13 +109,19 @@ async def _stream_text(text: str) -> AsyncIterator[str]:
 
 
 def _build_stream_headers(result: ChatResponse) -> dict[str, str]:
-    """스트리밍 응답에 실어 보낼 메타데이터 헤더를 만듭니다."""
+    """스트리밍 응답에 실어 보낼 메타데이터 헤더를 만듭니다.
+
+    스트리밍 본문은 텍스트만 흘려보내므로, signals/switch_to 같은 구조화 데이터는
+    헤더에 JSON 문자열(ASCII 이스케이프)로 실어 전달합니다.
+    """
     headers = {
         "X-Session-Id": result.session_id,
         "X-Librarian-Id": result.librarian_id,
     }
+    # 헤더 값은 ASCII만 안전하므로 ensure_ascii=True로 직렬화
+    if result.signals:
+        headers["X-Signals"] = json.dumps(result.signals.model_dump(), ensure_ascii=True)
     if result.switch_to:
-        # 헤더는 ASCII만 안전하므로 JSON을 ASCII 이스케이프로 직렬화
         headers["X-Switch-To"] = json.dumps(result.switch_to.model_dump(), ensure_ascii=True)
     return headers
 

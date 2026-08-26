@@ -5,7 +5,33 @@ import pytest
 import respx
 
 from app.librarian.curation.mood import WeatherCondition
-from app.librarian.tools.weather import OpenMeteoProvider, WeatherResult, _wmo_to_condition
+from app.librarian.tools.weather import (
+    OpenMeteoProvider,
+    WeatherResult,
+    _wmo_to_condition,
+    is_valid_coordinates,
+)
+
+
+class TestIsValidCoordinates:
+    @pytest.mark.parametrize(
+        ("lat", "lon", "expected"),
+        [
+            (37.5665, 126.9780, True),  # 서울
+            (0.0, 0.0, True),  # 적도/본초자오선
+            (90.0, 180.0, True),  # 경계값 최대
+            (-90.0, -180.0, True),  # 경계값 최소
+            (90.1, 0.0, False),  # 위도 초과
+            (-90.1, 0.0, False),  # 위도 미만
+            (0.0, 180.1, False),  # 경도 초과
+            (0.0, -180.1, False),  # 경도 미만
+            (None, 126.0, False),  # 위도 없음
+            (37.0, None, False),  # 경도 없음
+            (None, None, False),  # 둘 다 없음
+        ],
+    )
+    def test_validation(self, lat, lon, expected):
+        assert is_valid_coordinates(lat, lon) is expected
 
 
 class TestWmoToCondition:

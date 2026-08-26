@@ -8,7 +8,11 @@ signals: 우리 사서가 읽어낸 날씨·시간대·무드·장르포커스 �
 팀원의 검색 에이전트가 이 정보를 활용해 실제 도서를 추천합니다.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+LocationSource = Literal["user", "default_seoul", "text_stated", "none"]
 
 
 class SwitchTo(BaseModel):
@@ -21,11 +25,21 @@ class SwitchTo(BaseModel):
 
 
 class WeatherInfo(BaseModel):
-    """날씨 정보."""
+    """날씨 정보.
+
+    location_source로 이 날씨가 어디 기준인지 구분합니다:
+    - "user": 사용자가 보낸 실제 좌표로 조회 (신뢰 가능)
+    - "default_seoul": 좌표가 없어 서울 기본값으로 조회 (사용자 위치 아님, UI에서 표시 시 주의)
+    - "text_stated": 사용자가 메시지에 날씨를 직접 언급 ("비 오는 날") — 기온 없음
+    - "none": 날씨 정보 없음 (시간대만 사용)
+    """
 
     condition: str = Field(description="날씨 상태 (clear/cloudy/rainy/snowy/stormy/foggy)")
     temperature: float | None = Field(default=None, description="기온(섭씨), 좌표 기반 조회 시에만")
     description: str | None = Field(default=None, description="한국어 날씨 설명")
+    location_source: LocationSource = Field(
+        default="none", description="날씨 정보의 위치 출처 — UI에서 신뢰도 표시에 활용"
+    )
 
 
 class Signals(BaseModel):

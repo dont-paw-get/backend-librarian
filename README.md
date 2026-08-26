@@ -131,8 +131,12 @@ curl http://localhost:8000/api/v1/health
 ```
 
 **응답 (stream=true):**
-- Content-Type: text/plain; charset=utf-8
-- 헤더: X-Session-Id, X-Librarian-Id, X-Switch-To(발생 시)
+- Content-Type: text/plain; charset=utf-8 (본문은 텍스트 청크 스트리밍)
+- 헤더로 구조화 데이터 전달 (모두 JSON 문자열, ASCII 이스케이프):
+  - `X-Session-Id`: 세션 ID
+  - `X-Librarian-Id`: 응답 사서 id
+  - `X-Signals`: signals JSON (weather/time_of_day/mood/genre_focus)
+  - `X-Switch-To`: switchTo JSON (발생 시에만)
 
 ## 사서 역할 분담
 
@@ -149,7 +153,12 @@ curl http://localhost:8000/api/v1/health
 
 ```json
 "signals": {
-  "weather": {"condition": "rainy", "temperature": 15.0, "description": "가벼운 비"},
+  "weather": {
+    "condition": "rainy",
+    "temperature": 15.0,
+    "description": "가벼운 비",
+    "location_source": "user"
+  },
   "time_of_day": "evening",
   "mood": "cozy",
   "genre_focus": "미스터리"
@@ -158,6 +167,19 @@ curl http://localhost:8000/api/v1/health
 
 - 날씨는 (1) 메시지에 직접 언급("비 오는 날") → (2) 좌표 기반 Open-Meteo 조회 → (3) 없으면 시간대만 순으로 결정
 - 팀원 검색 에이전트가 이 signals를 활용해 실제 도서를 추천
+
+**location_source** — 이 날씨가 어디 기준인지 구분 (UI에서 신뢰도 표시에 활용):
+
+| 값 | 의미 | 기온(temperature) |
+|---|---|---|
+| `user` | 사용자가 보낸 실제 좌표로 조회 | 있음, 신뢰 가능 |
+| `default_seoul` | 좌표 없어 stork가 서울 기본값으로 조회 (사용자 실제 위치 아님) | 있음, 서울 기준 |
+| `text_stated` | 사용자가 메시지에 날씨를 직접 언급 ("비 오는 날") | 없음 (null) |
+| `none` | 날씨 정보 없음 (시간대만 사용) | 없음 (null) |
+
+프론트에서 온도 뱃지를 보여줄 때 `location_source === "default_seoul"`이면
+"📍서울 기준" 같은 보조 문구를 붙이거나, `user`가 아닐 때는 온도 숫자 대신
+날씨 설명(description)만 노출하는 방식을 권장합니다.
 
 ## 오케스트레이터 연동
 
