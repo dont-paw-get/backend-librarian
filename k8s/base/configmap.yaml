@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-librarian-config
+  labels:
+    app.kubernetes.io/name: backend-librarian
+# 민감하지 않은 설정값만 여기에 둡니다.
+# AWS Access Key / Secret Key 등 비밀값은 Secret 에 둡니다.
+data:
+  APP_ENV: "production"
+  # Bedrock 사용 (Secret 으로 AWS 자격증명 주입). mock 으로 띄우려면 "" 로 비웁니다.
+  USE_BEDROCK: "true"
+  # 교육 계정에서 호출 가능한 것으로 확인된 리전/모델 (app/librarian/agent.py 기본값과 일치)
+  AWS_REGION: "ap-northeast-2"
+  AWS_DEFAULT_REGION: "ap-northeast-2"
+  BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20240620-v1:0"
