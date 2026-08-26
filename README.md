@@ -131,8 +131,12 @@ curl http://localhost:8000/api/v1/health
 ```
 
 **응답 (stream=true):**
-- Content-Type: text/plain; charset=utf-8
-- 헤더: X-Session-Id, X-Librarian-Id, X-Switch-To(발생 시)
+- Content-Type: text/plain; charset=utf-8 (본문은 텍스트 청크 스트리밍)
+- 헤더로 구조화 데이터 전달 (모두 JSON 문자열, ASCII 이스케이프):
+  - `X-Session-Id`: 세션 ID
+  - `X-Librarian-Id`: 응답 사서 id
+  - `X-Signals`: signals JSON (weather/time_of_day/mood/genre_focus)
+  - `X-Switch-To`: switchTo JSON (발생 시에만)
 
 ## 사서 역할 분담
 

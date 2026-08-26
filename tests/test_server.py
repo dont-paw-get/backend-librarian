@@ -127,6 +127,23 @@ class TestChatEndpoint:
         assert len(resp.text) > 0
 
     @pytest.mark.asyncio
+    async def test_streaming_signals_header(self, client: AsyncClient):
+        """스트리밍에서도 signals가 X-Signals 헤더(JSON)로 전달됨."""
+        import json
+
+        resp = await client.post(
+            "/api/v1/chat",
+            json={"message": "오늘 뭐 읽을까", "librarian_id": "cat", "session_id": "stream-sig", "stream": True},
+        )
+        assert resp.status_code == 200
+        assert "x-signals" in resp.headers
+        signals = json.loads(resp.headers["x-signals"])
+        assert signals["genre_focus"] == "미스터리"
+        assert "weather" in signals
+        assert "mood" in signals
+        assert "time_of_day" in signals
+
+    @pytest.mark.asyncio
     async def test_streaming_switch_to_header(self, client: AsyncClient):
         """switchTo 발생 시 X-Switch-To 헤더로 전달."""
         resp = await client.post(
