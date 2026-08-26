@@ -12,11 +12,11 @@ from app.librarian.librarians import (
 class TestLibrarianRegistry:
     def test_cat_exists(self):
         assert CAT.id == "cat"
-        assert "장르" in CAT.role
+        assert CAT.genre_focus == "미스터리"
 
     def test_stork_exists(self):
         assert STORK.id == "stork"
-        assert "날씨" in STORK.role
+        assert STORK.genre_focus == "비즈니스"
 
     def test_registry_has_two_entries(self):
         assert len(LIBRARIAN_REGISTRY) == 2

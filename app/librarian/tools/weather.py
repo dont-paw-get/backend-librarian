@@ -68,6 +68,38 @@ def _wmo_to_condition(code: int) -> tuple[WeatherCondition, str]:
     return _WMO_CODE_MAP.get(code, (WeatherCondition.CLEAR, "알 수 없음"))
 
 
+# === 메시지 텍스트 → 날씨 감지 ===
+# 사용자가 "비 오는 날 읽을 책"처럼 날씨를 직접 말하면 위치 없이도 반영합니다.
+_TEXT_WEATHER_KEYWORDS: list[tuple[str, WeatherCondition]] = [
+    ("장마", WeatherCondition.RAINY),
+    ("소나기", WeatherCondition.RAINY),
+    ("비", WeatherCondition.RAINY),
+    ("눈", WeatherCondition.SNOWY),
+    ("함박눈", WeatherCondition.SNOWY),
+    ("맑", WeatherCondition.CLEAR),
+    ("화창", WeatherCondition.CLEAR),
+    ("흐린", WeatherCondition.CLOUDY),
+    ("흐림", WeatherCondition.CLOUDY),
+    ("구름", WeatherCondition.CLOUDY),
+    ("안개", WeatherCondition.FOGGY),
+    ("폭풍", WeatherCondition.STORMY),
+    ("태풍", WeatherCondition.STORMY),
+    ("천둥", WeatherCondition.STORMY),
+    ("번개", WeatherCondition.STORMY),
+]
+
+
+def detect_weather_from_text(message: str) -> WeatherCondition | None:
+    """메시지에 날씨 표현이 있으면 WeatherCondition으로 변환합니다.
+
+    위치 정보 없이도 사용자가 언급한 날씨를 무드 매핑에 반영하기 위한 용도입니다.
+    """
+    for keyword, condition in _TEXT_WEATHER_KEYWORDS:
+        if keyword in message:
+            return condition
+    return None
+
+
 class OpenMeteoProvider(WeatherProvider):
     """Open-Meteo API 기반 날씨 조회 (무키, 무료)."""
 

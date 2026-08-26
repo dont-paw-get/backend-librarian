@@ -154,3 +154,41 @@ class TestHandleChat:
             agent_callable=None,
         )
         assert "에이전트 미연결" in response.text
+
+    @pytest.mark.asyncio
+    async def test_signals_included(self, memory: LocalMemoryStore):
+        """응답에 signals(날씨/시간/무드/장르포커스)가 포함됨."""
+        request = ChatRequest(
+            message="안녕",
+            librarian_id="cat",
+            session_id="sess-signals",
+        )
+        response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
+        assert response.signals is not None
+        assert response.signals.genre_focus == "미스터리"
+        assert response.signals.mood
+        assert response.signals.time_of_day
+
+    @pytest.mark.asyncio
+    async def test_stated_weather_from_text(self, memory: LocalMemoryStore):
+        """메시지에 날씨를 직접 언급하면 위치 없이도 반영."""
+        request = ChatRequest(
+            message="비 오는 날에 어울리는 분위기 알려줘",
+            librarian_id="cat",
+            session_id="sess-stated-weather",
+        )
+        response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
+        assert response.signals is not None
+        assert response.signals.weather is not None
+        assert response.signals.weather.condition == "rainy"
+
+    @pytest.mark.asyncio
+    async def test_stork_genre_focus_business(self, memory: LocalMemoryStore):
+        """stork의 genre_focus는 비즈니스."""
+        request = ChatRequest(
+            message="안녕하세요",
+            librarian_id="stork",
+            session_id="sess-stork-focus",
+        )
+        response = await handle_chat(request=request, memory=memory, agent_callable=fake_agent_normal)
+        assert response.signals.genre_focus == "비즈니스"

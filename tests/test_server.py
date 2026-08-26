@@ -132,7 +132,7 @@ class TestChatEndpoint:
         resp = await client.post(
             "/api/v1/chat",
             json={
-                "message": "오늘 날씨에 맞는 책 추천해줘",
+                "message": "경영 전략 관련 책 얘기하고 싶어",
                 "librarian_id": "cat",
                 "session_id": "stream-switch",
                 "stream": True,

@@ -34,13 +34,17 @@ class TestCatPersona:
     def test_cat_prompt_has_speech_rules(self):
         assert "냥" in CAT_CHARACTER_PROMPT
 
-    def test_cat_prompt_covers_all_genres(self):
-        """cat이 전 장르를 담당하는지 확인."""
-        assert "모든 장르" in CAT_CHARACTER_PROMPT
+    def test_cat_prompt_mystery_focus(self):
+        """cat이 미스터리 특화인지 확인."""
+        assert "미스터리" in CAT_CHARACTER_PROMPT
 
-    def test_cat_prompt_switch_to_stork_on_weather(self):
-        """날씨/시간대 질문 시 stork로 전환하라는 지시가 있는지."""
-        assert "날씨" in CAT_CHARACTER_PROMPT
+    def test_cat_prompt_no_book_recommendation(self):
+        """책 제목 직접 추천을 하지 않는다는 지침이 있는지."""
+        assert "추천하지 않" in CAT_CHARACTER_PROMPT
+
+    def test_cat_prompt_switch_to_stork_on_business(self):
+        """비즈니스 질문 시 stork로 전환하라는 지시가 있는지."""
+        assert "비즈니스" in CAT_CHARACTER_PROMPT
         assert "황새 사서" in CAT_CHARACTER_PROMPT
         assert "switchTo" in CAT_CHARACTER_PROMPT
 
