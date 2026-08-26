@@ -31,32 +31,31 @@ def _get_stork_agent():
 
 
 def _build_prompt(message: str, context: dict, librarian_id: str = "cat") -> str:
-    """사용자 메시지와 컨텍스트를 결합한 프롬프트를 생성합니다."""
+    """사용자 메시지와 컨텍스트를 결합한 프롬프트를 생성합니다.
+
+    실제 도서 추천은 검색 사서가 담당하므로, 여기서는 날씨/시간대/무드를 읽어
+    분위기를 잡아주는 대화를 유도합니다. 구체적 책 제목은 언급하지 않습니다.
+    """
     parts = []
 
-    # 날씨 정보 — stork는 날씨를 강조
+    # 날씨/시간대/무드 신호
     weather = context.get("weather", {})
     if weather.get("condition"):
         temp_str = f", 기온 {weather['temperature']}°C" if weather.get("temperature") else ""
         desc = weather.get("description", weather["condition"])
-        if librarian_id == "stork":
-            parts.append(
-                f"[현재 날씨 정보 — 이 정보를 반드시 활용해 추천해주세요]\n"
-                f"  날씨: {desc}{temp_str}\n"
-                f"  이 날씨에 어울리는 분위기와 연결해 책을 추천해주세요."
-            )
-        else:
-            parts.append(f"[현재 날씨: {desc}{temp_str}]")
+        parts.append(f"[현재 날씨: {desc}{temp_str}]")
 
-    # 무드 정보
+    time_of_day = context.get("time_of_day")
+    if time_of_day:
+        parts.append(f"[시간대: {time_of_day}]")
+
     mood = context.get("mood")
     if mood:
-        parts.append(f"[현재 무드: {mood}]")
+        parts.append(f"[무드: {mood}]")
 
-    # 추천 장르
-    genres = context.get("recommended_genres", [])
-    if genres:
-        parts.append(f"[추천 장르: {', '.join(genres)}]")
+    genre_focus = context.get("genre_focus")
+    if genre_focus:
+        parts.append(f"[당신의 특화 장르: {genre_focus}]")
 
     # 이전 대화 맥락
     history = context.get("session_history", [])
@@ -65,16 +64,15 @@ def _build_prompt(message: str, context: dict, librarian_id: str = "cat") -> str
         history_text = "\n".join(f"{h['role']}: {h['content']}" for h in recent)
         parts.append(f"[이전 대화]\n{history_text}")
 
-    # 선호 장르
-    prefs = context.get("preferred_genres", [])
-    if prefs:
-        parts.append(f"[사용자 선호 장르: {', '.join(prefs)}]")
+    # 응답 지침
+    parts.append(
+        "[지침] 위 날씨·시간대·무드를 자연스럽게 반영해 대화하세요. "
+        "구체적인 책 제목이나 저자는 언급하지 말고, 어떤 분위기·방향의 독서가 어울릴지 "
+        "페르소나에 맞게 이야기하며 사용자의 취향을 물어보세요."
+    )
 
-    # 컨텍스트 + 실제 메시지
     context_block = "\n".join(parts)
-    if context_block:
-        return f"{context_block}\n\n사용자: {message}"
-    return message
+    return f"{context_block}\n\n사용자: {message}"
 
 
 def check_bedrock_access() -> tuple[bool, str]:
