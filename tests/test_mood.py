@@ -1,14 +1,20 @@
 """시간대·날씨 → 무드 → 장르 매핑 로직 테스트."""
 
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from app.librarian.curation.mood import (
+    KST,
     Mood,
     TimeOfDay,
     WeatherCondition,
+    current_time_of_day,
     get_genres_for_mood,
     get_mood,
     hour_to_time_of_day,
+    now_kst,
     recommend_genres,
 )
 
@@ -92,3 +98,38 @@ class TestRecommendGenres:
         mood, genres = recommend_genres(0, WeatherCondition.STORMY)
         assert mood == Mood.THRILLING
         assert "미스터리" in genres
+
+
+class TestKstTimezone:
+    def test_kst_is_seoul(self):
+        assert KST == ZoneInfo("Asia/Seoul")
+
+    def test_now_kst_is_timezone_aware(self):
+        now = now_kst()
+        assert now.tzinfo is not None
+
+    def test_now_kst_offset_is_plus_9(self):
+        """KST는 UTC+9."""
+        now = now_kst()
+        assert now.utcoffset().total_seconds() == 9 * 3600
+
+    def test_kst_vs_utc_hour_difference(self):
+        """같은 순간에 대해 KST 시각이 UTC보다 9시간 앞선다."""
+        utc_now = datetime.now(tz=timezone.utc)
+        kst_now = utc_now.astimezone(KST)
+        assert (kst_now.hour - utc_now.hour) % 24 == 9
+
+    def test_dawn_6am_kst_not_night(self):
+        """핵심 버그 회귀 방지: KST 오전 6시는 새벽(dawn)이어야 함 (UTC로 계산하면 21시=밤).
+
+        UTC 21시 = KST 오전 6시. hour_to_time_of_day에 KST hour(6)를 넘기면 DAWN.
+        """
+        # KST 오전 6시를 직접 구성
+        kst_6am = datetime(2026, 8, 27, 6, 5, tzinfo=KST)
+        assert hour_to_time_of_day(kst_6am.hour) == TimeOfDay.DAWN
+        # 만약 UTC로 계산했다면 21시라 NIGHT가 됐을 것
+        utc_equiv = kst_6am.astimezone(timezone.utc)
+        assert hour_to_time_of_day(utc_equiv.hour) == TimeOfDay.NIGHT
+
+    def test_current_time_of_day_returns_valid(self):
+        assert current_time_of_day() in TimeOfDay

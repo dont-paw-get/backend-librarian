@@ -11,13 +11,13 @@
 8. 메모리 업데이트 후 ChatResponse 반환
 """
 
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.librarian.curation.mood import (
     WeatherCondition,
     get_mood,
     hour_to_time_of_day,
+    now_kst,
 )
 from app.librarian.librarians import get_librarian, get_other_librarian
 from app.librarian.memory.base import ConversationEntry, MemoryStore
@@ -100,8 +100,8 @@ async def handle_chat(
         if weather_result is None:
             location_source = "none"
 
-    # 4. 시간대·날씨 → 무드
-    now = datetime.now(tz=timezone.utc)
+    # 4. 시간대·날씨 → 무드 (시간대는 KST 기준)
+    now = now_kst()
     time_of_day = hour_to_time_of_day(now.hour)
     mood = get_mood(time_of_day, weather_condition)
 
