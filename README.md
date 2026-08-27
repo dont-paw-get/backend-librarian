@@ -45,6 +45,7 @@ backend-librarian/
 │       └── local.py         # 인메모리 구현
 ├── tests/                   # 152 tests
 ├── scripts/
+│   ├── run_server.sh        # 서버 실행 (--host 0.0.0.0, 외부 접속용)
 │   ├── mfa_session.py       # MFA 세션 자격증명 발급
 │   ├── smoke_bedrock_chat.py # Bedrock end-to-end 스모크
 │   └── verify_bedrock_mfa.py # 모델/리전 접근 진단
@@ -72,9 +73,32 @@ uv run uvicorn app.librarian.server:app --reload
 # 1. MFA 세션 발급 (12시간 유효)
 uv run python scripts/mfa_session.py <MFA 6자리 코드>
 
-# 2. 서버 실행
+# 2. 서버 실행 (로컬 전용)
 USE_BEDROCK=true AWS_PROFILE=mfa uv run uvicorn app.librarian.server:app --reload
 ```
+
+### 외부(오케스트레이터/다른 기기)에서 접속해야 할 때
+
+기본값(`127.0.0.1`)은 **내 컴퓨터에서만** 접근됩니다. 오케스트레이터가 다른 기기(예: 팀원 맥북)에서
+이 서버로 요청을 보내야 하면 **반드시 `--host 0.0.0.0`** 을 붙여 모든 인터페이스에 바인딩해야 합니다.
+
+```bash
+USE_BEDROCK=true AWS_PROFILE=mfa uv run uvicorn app.librarian.server:app --host 0.0.0.0 --port 8000 --reload
+```
+
+편의 스크립트로도 실행할 수 있습니다 (`--host 0.0.0.0 --port 8000` 기본 포함):
+
+```bash
+# fake 모드
+bash scripts/run_server.sh
+
+# Bedrock 모드
+USE_BEDROCK=true AWS_PROFILE=mfa bash scripts/run_server.sh
+```
+
+> 팀원은 `http://<내-IP>:8000/api/v1/chat` 으로 접속합니다.
+> 내 IP 확인: Windows `ipconfig` / macOS·Linux `ifconfig` 또는 `ip addr`.
+> 같은 네트워크(Wi-Fi)에 있어야 하며, 방화벽에서 8000 포트 인바운드를 허용해야 할 수 있습니다.
 
 ### 헬스체크
 
