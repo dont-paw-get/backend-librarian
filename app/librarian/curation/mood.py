@@ -1,9 +1,15 @@
 """시간대·날씨 → 무드 → 장르 매핑 로직.
 
 순수 함수로 구현하여 외부 의존 없이 단위 테스트 가능.
+시간대는 한국 표준시(KST, Asia/Seoul) 기준으로 계산합니다.
 """
 
+from datetime import datetime
 from enum import StrEnum
+from zoneinfo import ZoneInfo
+
+# 서비스 기준 타임존 (한국). 해외 확장 시 좌표 기반 타임존으로 교체 가능.
+KST = ZoneInfo("Asia/Seoul")
 
 
 class TimeOfDay(StrEnum):
@@ -47,6 +53,16 @@ def hour_to_time_of_day(hour: int) -> TimeOfDay:
         return TimeOfDay.EVENING
     else:
         return TimeOfDay.NIGHT
+
+
+def now_kst() -> datetime:
+    """현재 시각을 KST(Asia/Seoul) 기준으로 반환합니다."""
+    return datetime.now(tz=KST)
+
+
+def current_time_of_day() -> TimeOfDay:
+    """현재 KST 시각 기준의 시간대를 반환합니다."""
+    return hour_to_time_of_day(now_kst().hour)
 
 
 # === 무드 매핑 테이블 ===
