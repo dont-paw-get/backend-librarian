@@ -15,40 +15,45 @@ from pydantic import BaseModel, Field
 LocationSource = Literal["user", "default_seoul", "text_stated", "none"]
 
 
+class WeatherSignal(BaseModel):
+    """날씨 시그널."""
+
+    weather: str | None = Field(default=None, description="날씨 상태 (예: 비, 맑음, 눈)")
+    condition: str | None = Field(default=None, description="날씨 상태 영문/국문 코드")
+    temperature: float | None = Field(default=None, description="기온 (°C)")
+    is_rainy: bool | None = Field(default=None, description="강수 여부")
+    description: str | None = Field(default=None, description="날씨 설명")
+    location_source: LocationSource | str | None = Field(
+        default="none", description="위치 출처 (user, default_seoul, text_stated, none)"
+    )
+    confidence: float | None = Field(default=None, description="날씨 분석 신뢰도")
+
+
+# 하위 호환용 별칭
+WeatherInfo = WeatherSignal
+
+
+class LibrarianSignals(BaseModel):
+    """사서가 대화 및 상황 분석에서 도출한 시그널."""
+
+    weather: WeatherSignal | None = Field(default=None, description="날씨 정보")
+    time_of_day: str | None = Field(default=None, description="시간대 (dawn, day, evening, night 등)")
+    mood: str | None = Field(default=None, description="사용자 감정/무드 키워드")
+    genre_focus: list[str] | str = Field(default_factory=list, description="추천 포커스 장르")
+
+
+# 하위 호환용 별칭
+Signals = LibrarianSignals
+
+
 class SwitchTo(BaseModel):
     """다른 사서에게 대화를 넘길 때 프론트에 전달하는 정보."""
 
     id: str = Field(description="사서 캐릭터 id (예: 'cat', 'stork')")
     name: str = Field(description="사서 이름 (예: '고양이 사서')")
     icon: str = Field(description="사서 아이콘 이모지")
-    genres: list[str] = Field(description="해당 사서의 특화 영역")
-
-
-class WeatherInfo(BaseModel):
-    """날씨 정보.
-
-    location_source로 이 날씨가 어디 기준인지 구분합니다:
-    - "user": 사용자가 보낸 실제 좌표로 조회 (신뢰 가능)
-    - "default_seoul": 좌표가 없어 서울 기본값으로 조회 (사용자 위치 아님, UI에서 표시 시 주의)
-    - "text_stated": 사용자가 메시지에 날씨를 직접 언급 ("비 오는 날") — 기온 없음
-    - "none": 날씨 정보 없음 (시간대만 사용)
-    """
-
-    condition: str = Field(description="날씨 상태 (clear/cloudy/rainy/snowy/stormy/foggy)")
-    temperature: float | None = Field(default=None, description="기온(섭씨), 좌표 기반 조회 시에만")
-    description: str | None = Field(default=None, description="한국어 날씨 설명")
-    location_source: LocationSource = Field(
-        default="none", description="날씨 정보의 위치 출처 — UI에서 신뢰도 표시에 활용"
-    )
-
-
-class Signals(BaseModel):
-    """사서가 읽어낸 추천 신호 — 팀원 검색 에이전트가 활용."""
-
-    weather: WeatherInfo | None = Field(default=None, description="날씨 정보")
-    time_of_day: str = Field(description="시간대 (dawn/day/evening/night)")
-    mood: str = Field(description="무드 (cozy/adventurous/reflective/dreamy/thrilling/calm)")
-    genre_focus: str = Field(description="현재 사서의 특화 장르 (예: 미스터리, 비즈니스)")
+    genres: list[str] = Field(description="해당 사서의 담당/특화 장르 목록")
+    reason: str | None = Field(default=None, description="전환 추천 이유")
 
 
 class ChatRequest(BaseModel):
@@ -65,13 +70,14 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """채팅 응답.
 
-    discovery 계약(message/session_id)과 librarian 고유 필드(text/switch_to/signals)를
-    함께 제공해 프론트/오케스트레이터가 유연하게 파싱할 수 있게 합니다.
+    discovery 계약(message/session_id/signals/switch_to)과 librarian 고유 필드(text)를 함께 제공합니다.
     """
 
     message: str = Field(description="사서 답변 (discovery 호환 필드)")
     session_id: str = Field(description="세션 식별자")
     text: str = Field(description="사서 답변 (librarian 고유 필드, message와 동일)")
     librarian_id: str = Field(default="cat", description="응답한 사서 id")
-    signals: Signals | None = Field(default=None, description="날씨/시간/무드/장르포커스 신호")
+    signals: LibrarianSignals | None = Field(default=None, description="날씨/시간/무드/장르포커스 신호")
     switch_to: SwitchTo | None = Field(default=None, description="다른 사서로 전환 시 정보")
+
+
