@@ -82,7 +82,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Signals", "X-Switch-To"],
+    expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Switch-To", "X-Signals"],
 )
 
 # 싱글턴 인스턴스
@@ -120,7 +120,9 @@ def _build_stream_headers(result: ChatResponse) -> dict[str, str]:
     }
     # 헤더 값은 ASCII만 안전하므로 ensure_ascii=True로 직렬화
     if result.signals:
-        headers["X-Signals"] = json.dumps(result.signals.model_dump(), ensure_ascii=True)
+        headers["X-Signals"] = json.dumps(
+            result.signals.model_dump(exclude_none=True), ensure_ascii=True
+        )
     if result.switch_to:
         headers["X-Switch-To"] = json.dumps(result.switch_to.model_dump(), ensure_ascii=True)
     return headers

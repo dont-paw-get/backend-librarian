@@ -29,31 +29,30 @@ class TestBuildSystemPrompt:
 class TestCatPersona:
     def test_cat_prompt_has_identity(self):
         assert "러시안 블루" in CAT_CHARACTER_PROMPT
-        assert "나비" in CAT_CHARACTER_PROMPT
+        assert "블루" in CAT_CHARACTER_PROMPT
 
     def test_cat_prompt_has_speech_rules(self):
         assert "냥" in CAT_CHARACTER_PROMPT
+        assert "반말" in CAT_CHARACTER_PROMPT
 
-    def test_cat_prompt_mystery_focus(self):
-        """cat이 미스터리 특화인지 확인."""
+    def test_cat_prompt_covers_specialties(self):
+        """cat이 미스터리/추리 특화인지 확인."""
         assert "미스터리" in CAT_CHARACTER_PROMPT
+        assert "추리" in CAT_CHARACTER_PROMPT
 
-    def test_cat_prompt_no_book_recommendation(self):
-        """책 제목 직접 추천을 하지 않는다는 지침이 있는지."""
-        assert "추천하지 않" in CAT_CHARACTER_PROMPT
-
-    def test_cat_prompt_switch_to_stork_on_business(self):
-        """비즈니스 질문 시 stork로 전환하라는 지시가 있는지."""
+    def test_cat_prompt_switch_to_stork(self):
+        """비즈니스/경영 질문 시 stork로 전환하라는 지시가 있는지."""
         assert "비즈니스" in CAT_CHARACTER_PROMPT
         assert "황새 사서" in CAT_CHARACTER_PROMPT
-        assert "switchTo" in CAT_CHARACTER_PROMPT
+        assert "[전환제안: stork]" in CAT_CHARACTER_PROMPT
 
     def test_full_prompt_includes_common_rules(self):
         full = get_cat_system_prompt()
-        assert "나비" in full
+        assert "블루" in full
         assert "공통 규칙" in full
         assert "한국어" in full
 
     def test_full_prompt_is_not_empty(self):
         full = get_cat_system_prompt()
         assert len(full) > 500
+

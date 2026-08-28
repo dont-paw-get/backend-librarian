@@ -39,7 +39,10 @@ async def fake_agent_normal(message: str, context: dict) -> str:
 
 async def fake_agent_switch(message: str, context: dict) -> str:
     """다른 사서를 안내하는 fake 에이전트."""
-    return "이 분야는 우리 황새 사서가 더 잘 알아냥~ 🪿 미스터리나 SF 쪽은 황새 사서한테 물어보라냥!"
+    return (
+        "이 분야는 우리 황새 사서가 더 잘 알아냥~ 🪿 "
+        "경영이나 비즈니스 쪽은 황새 사서한테 물어보라냥! [전환제안: stork]"
+    )
 
 
 class TestHandleChat:
@@ -59,6 +62,8 @@ class TestHandleChat:
         assert response.text
         assert "냥" in response.text
         assert response.switch_to is None
+        assert response.signals is not None
+        assert response.signals.mood
 
     @pytest.mark.asyncio
     async def test_with_weather(self, memory: LocalMemoryStore):
@@ -79,12 +84,15 @@ class TestHandleChat:
         )
         assert response.text
         assert "cozy" in response.text  # rainy → cozy mood
+        assert response.signals is not None
+        assert response.signals.weather is not None
+        assert response.signals.weather.temperature == 15.0
 
     @pytest.mark.asyncio
     async def test_switch_to_other_librarian(self, memory: LocalMemoryStore):
         """다른 사서 안내 시 switchTo가 포함됨."""
         request = ChatRequest(
-            message="미스터리 소설 추천해줘",
+            message="비즈니스 경영 책 추천해줘",
             librarian_id="cat",
             session_id="sess-test-3",
         )

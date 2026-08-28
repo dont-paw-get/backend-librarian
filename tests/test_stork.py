@@ -6,10 +6,12 @@ from app.librarian.personas.stork import STORK_CHARACTER_PROMPT, get_stork_syste
 class TestStorkPersona:
     def test_stork_prompt_has_identity(self):
         assert "넓적부리황새" in STORK_CHARACTER_PROMPT
-        assert "하루" in STORK_CHARACTER_PROMPT
+        assert "슈빌" in STORK_CHARACTER_PROMPT
 
     def test_stork_prompt_has_speech_rules(self):
         assert "랍니다" in STORK_CHARACTER_PROMPT
+        assert "존댓말" in STORK_CHARACTER_PROMPT
+        assert "두둥" in STORK_CHARACTER_PROMPT
 
     def test_stork_prompt_has_dudung_signature(self):
         assert "두둥" in STORK_CHARACTER_PROMPT
@@ -18,13 +20,18 @@ class TestStorkPersona:
         assert "날씨" in STORK_CHARACTER_PROMPT
         assert "시간대" in STORK_CHARACTER_PROMPT
 
+    def test_stork_prompt_covers_business_specialty(self):
+        assert "비즈니스" in STORK_CHARACTER_PROMPT
+        assert "경영" in STORK_CHARACTER_PROMPT
+
     def test_stork_prompt_has_switch_guidance(self):
         assert "고양이 사서" in STORK_CHARACTER_PROMPT
-        assert "switchTo" in STORK_CHARACTER_PROMPT
+        assert "미스터리" in STORK_CHARACTER_PROMPT
+        assert "[전환제안: cat]" in STORK_CHARACTER_PROMPT
 
     def test_full_prompt_includes_common_rules(self):
         full = get_stork_system_prompt()
-        assert "하루" in full
+        assert "슈빌" in full
         assert "공통 규칙" in full
         assert "한국어" in full
 

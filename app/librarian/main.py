@@ -1,16 +1,16 @@
-"""오케스트레이션 엔트리포인트 — handle_chat.
+"""AgentCore 오케스트레이션 엔트리포인트 — handle_chat.
 
-흐름:
-1. 세션 ID 확보
-2. 메모리에서 맥락 조회
-3. 날씨 파악 (메시지 텍스트 우선 → 좌표 조회 → 없으면 시간대만)
-4. 시간대·날씨 → 무드 매핑
-5. signals 조립 (팀원 검색 에이전트가 활용)
-6. 에이전트 호출 (페르소나 대화, 실제 도서 추천은 하지 않음)
-7. switchTo 판단
-8. 메모리 업데이트 후 ChatResponse 반환
+전체 오케스트레이션 흐름:
+1. 세션 ID 확보 및 메모리 맥락 조회
+2. 날씨 파악 (메시지 텍스트 우선 → 좌표 조회 → 서울 기본값 폴백)
+3. 시간대(KST 기준) 및 날씨 → 무드 매핑
+4. signals 및 context 조립
+5. 에이전트 호출 (페르소나 대화)
+6. switch_to 다중 안전망 판단 ([전환제안: ...] 태그 및 별칭 감지)
+7. 메모리 업데이트 후 ChatResponse 반환
 """
 
+import re
 from uuid import uuid4
 
 from app.librarian.curation.mood import (
@@ -18,16 +18,17 @@ from app.librarian.curation.mood import (
     get_mood,
     hour_to_time_of_day,
     now_kst,
+    recommend_genres,
 )
 from app.librarian.librarians import get_librarian, get_other_librarian
 from app.librarian.memory.base import ConversationEntry, MemoryStore
 from app.librarian.schemas import (
     ChatRequest,
     ChatResponse,
+    LibrarianSignals,
     LocationSource,
-    Signals,
     SwitchTo,
-    WeatherInfo,
+    WeatherSignal,
 )
 from app.librarian.tools.weather import (
     WeatherProvider,
@@ -36,9 +37,17 @@ from app.librarian.tools.weather import (
     is_valid_coordinates,
 )
 
-# stork 사서 기본 위치 (서울) — 좌표/텍스트 날씨가 모두 없을 때 폴백
+# 기본 위치 (서울) — 좌표/텍스트 날씨가 모두 없을 때 폴백
 _DEFAULT_LAT = 37.5665
 _DEFAULT_LON = 126.9780
+
+# 전환 제안 태그 패턴
+_SWITCH_TAG_PATTERN = re.compile(r"\[전환제안:\s*([a-zA-Z0-9_-]+)\]")
+
+# 황새/슈빌 사서 식별 별칭
+_STORK_ALIASES = ("황새 사서", "황새", "슈빌", "하루", "stork")
+# 고양이 사서 식별 별칭
+_CAT_ALIASES = ("고양이 사서", "고양이", "나비", "블루", "cat")
 
 
 async def handle_chat(
@@ -57,7 +66,7 @@ async def handle_chat(
                         signature: (message: str, context: dict) -> str
 
     Returns:
-        ChatResponse (text + signals + optional switchTo)
+        ChatResponse (message, text, session_id, librarian_id, switch_to, signals)
     """
     # 1. 세션 ID 확보
     session_id = request.session_id or str(uuid4())
@@ -65,29 +74,29 @@ async def handle_chat(
     # 2. 메모리에서 맥락 조회
     session_ctx = await memory.get_context(session_id)
 
-    # 3. 날씨 파악 (location_source로 이 날씨가 어디 기준인지 추적)
+    # 3. 날씨 파악 (location_source 추적)
     weather_result: WeatherResult | None = None
     location_source: LocationSource = "none"
     stated_condition = detect_weather_from_text(request.message)
 
     if stated_condition is not None:
-        # 3-1. 사용자가 메시지에 날씨를 직접 언급 → 우선 사용 (위치 불필요, 기온 없음)
+        # 3-1. 사용자가 메시지에 날씨를 직접 언급 → 우선 사용
         weather_condition = stated_condition
         location_source = "text_stated"
     else:
-        # 3-2. 좌표가 유효하면 실제 날씨 조회. 범위 밖이면 무시하고 폴백.
+        # 3-2. 좌표가 유효하면 실제 날씨 조회, 없으면 서울 기본값 폴백
         latitude = request.latitude
         longitude = request.longitude
         has_user_coords = is_valid_coordinates(latitude, longitude)
-        if not has_user_coords:
-            latitude = longitude = None  # 유효하지 않은 좌표는 버림
 
         if has_user_coords:
             location_source = "user"
         elif request.librarian_id == "stork":
-            # stork는 좌표가 없으면 서울 기본 위치로 폴백 (사용자 실제 위치 아님)
             latitude, longitude = _DEFAULT_LAT, _DEFAULT_LON
             location_source = "default_seoul"
+        else:
+            latitude = longitude = None
+            location_source = "none"
 
         if weather_provider and latitude is not None and longitude is not None:
             try:
@@ -97,40 +106,34 @@ async def handle_chat(
                 location_source = "none"
 
         weather_condition = weather_result.condition if weather_result else WeatherCondition.CLEAR
-        if weather_result is None:
+        if weather_result is None and not has_user_coords and request.librarian_id != "stork":
             location_source = "none"
 
-    # 4. 시간대·날씨 → 무드 (시간대는 KST 기준)
+    # 4. 시간대·날씨 → 무드 (KST 기준)
     now = now_kst()
-    time_of_day = hour_to_time_of_day(now.hour)
-    mood = get_mood(time_of_day, weather_condition)
+    time_of_day_enum = hour_to_time_of_day(now.hour)
+    mood = get_mood(time_of_day_enum, weather_condition)
+    _, recommended_genres = recommend_genres(now.hour, weather_condition)
 
-    # 5. 담당 사서 및 signals 조립
+    # 5. 담당 사서 확인
     current_librarian = get_librarian(request.librarian_id)
     other_librarian = get_other_librarian(request.librarian_id)
     genre_focus = current_librarian.genre_focus if current_librarian else ""
 
-    weather_info = WeatherInfo(
-        condition=weather_condition.value,
-        temperature=weather_result.temperature if weather_result else None,
-        description=weather_result.description if weather_result else None,
-        location_source=location_source,
-    )
-    signals = Signals(
-        weather=weather_info,
-        time_of_day=time_of_day.value,
-        mood=mood.value,
-        genre_focus=genre_focus,
-    )
-
-    # 에이전트 호출용 맥락
+    # 6. 에이전트 호출용 맥락
     context = {
         "session_history": [
             {"role": e.role, "content": e.content} for e in session_ctx.history[-10:]
         ],
         "preferred_genres": session_ctx.preferred_genres,
-        "weather": weather_info.model_dump(),
-        "time_of_day": time_of_day.value,
+        "recommended_genres": recommended_genres,
+        "weather": {
+            "condition": weather_condition.value,
+            "temperature": weather_result.temperature if weather_result else None,
+            "description": weather_result.description if weather_result else None,
+            "location_source": location_source,
+        },
+        "time_of_day": time_of_day_enum.value,
         "mood": mood.value,
         "genre_focus": genre_focus,
         "current_librarian": {
@@ -139,23 +142,65 @@ async def handle_chat(
         },
     }
 
-    # 6. 에이전트 호출
+    # 7. 에이전트 호출
     if agent_callable:
-        response_text = await agent_callable(request.message, context)
+        raw_response = await agent_callable(request.message, context)
     else:
-        response_text = f"[에이전트 미연결] 메시지 수신: {request.message}"
+        raw_response = f"[에이전트 미연결] 메시지 수신: {request.message}"
 
-    # 7. switchTo 판단 — 응답에 다른 사서 이름이 포함되면 전환 신호 생성
+    # 8. switch_to 판단 및 태그 정제 (다중 안전망)
+    target_id: str | None = None
     switch_to: SwitchTo | None = None
-    if other_librarian and other_librarian.name in response_text:
-        switch_to = SwitchTo(
-            id=other_librarian.id,
-            name=other_librarian.name,
-            icon=other_librarian.icon,
-            genres=other_librarian.specialties,
-        )
 
-    # 8. 메모리 업데이트
+    # 8-1. 명시적 태그 [전환제안: stork/cat] 감지
+    match = _SWITCH_TAG_PATTERN.search(raw_response)
+    if match:
+        target_id = match.group(1).strip().lower()
+        response_text = _SWITCH_TAG_PATTERN.sub("", raw_response).strip()
+    else:
+        response_text = raw_response.strip()
+
+    # 8-2. 태그가 없는 경우 다른 사서 이름/별칭 감지 (안전망)
+    if not target_id and other_librarian:
+        if request.librarian_id == "cat":
+            if any(alias in response_text for alias in _STORK_ALIASES):
+                target_id = "stork"
+        else:  # stork
+            if any(alias in response_text for alias in _CAT_ALIASES):
+                target_id = "cat"
+
+    # 8-3. switch_to 객체 조립
+    if target_id and target_id != request.librarian_id:
+        target_lib = get_librarian(target_id) or other_librarian
+        if target_lib:
+            switch_to = SwitchTo(
+                id=target_lib.id,
+                name=target_lib.name,
+                icon=target_lib.icon,
+                genres=target_lib.specialties,
+                reason=f"{target_lib.name} 전문 분야 추천",
+            )
+
+    weather_desc = weather_result.description if weather_result else (
+        stated_condition.value if stated_condition else None
+    )
+    weather_sig = WeatherSignal(
+        weather=weather_desc,
+        condition=weather_condition.value,
+        temperature=weather_result.temperature if weather_result else None,
+        description=weather_result.description if weather_result else None,
+        is_rainy=weather_condition in (WeatherCondition.RAINY, WeatherCondition.STORMY),
+        location_source=location_source,
+    )
+
+    signals = LibrarianSignals(
+        weather=weather_sig,
+        time_of_day=time_of_day_enum.value,
+        mood=mood.value,
+        genre_focus=genre_focus or recommended_genres,
+    )
+
+    # 10. 메모리 업데이트
     timestamp = now.isoformat()
     await memory.append_conversation(
         session_id,
@@ -174,3 +219,5 @@ async def handle_chat(
         signals=signals,
         switch_to=switch_to,
     )
+
+

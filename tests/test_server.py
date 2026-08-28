@@ -149,7 +149,7 @@ class TestChatEndpoint:
         resp = await client.post(
             "/api/v1/chat",
             json={
-                "message": "경영 전략 관련 책 얘기하고 싶어",
+                "message": "비즈니스 경영학 책 추천해줘",
                 "librarian_id": "cat",
                 "session_id": "stream-switch",
                 "stream": True,
@@ -158,6 +158,7 @@ class TestChatEndpoint:
         assert resp.status_code == 200
         assert "x-switch-to" in resp.headers
         assert "stork" in resp.headers["x-switch-to"]
+        assert "x-signals" in resp.headers
 
     @pytest.mark.asyncio
     async def test_session_memory_persists(self, client: AsyncClient):
