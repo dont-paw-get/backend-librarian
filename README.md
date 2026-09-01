@@ -216,5 +216,16 @@ uv run pytest -q
 | AWS_PROFILE | MFA 세션 프로필 | - |
 | AWS_REGION | Bedrock 리전 | ap-northeast-2 |
 | BEDROCK_MODEL_ID | Bedrock 모델 ID | anthropic.claude-3-5-sonnet-20240620-v1:0 |
+| OTEL_SERVICE_NAME | 트레이스/로그의 서비스 이름 | backend-librarian |
+| OTEL_EXPORTER_OTLP_ENDPOINT | OTLP HTTP Collector 엔드포인트. 설정 시에만 트레이스 전송 활성화 | 미설정(exporter 비활성화) |
+| OTEL_TRACES_SAMPLER_ARG | 트레이스 샘플링 비율 (0.0~1.0) | 1.0 |
+| LOG_LEVEL | 루트 로거 레벨 | INFO |
 
+## 분산 트레이싱 / 구조화 로깅
 
+- `OTEL_EXPORTER_OTLP_ENDPOINT`가 설정된 경우에만 OTLP(HTTP/protobuf) exporter가 활성화됩니다. 미설정 시 로컬 개발에서도 정상 동작합니다.
+- FastAPI(`/chat`, `/api/v1/chat` 등)와 httpx(Open-Meteo 등 outbound 호출), boto3/botocore(Bedrock) 호출이 자동 계측됩니다. `/health`, `/api/v1/health`는 트레이스에서 제외됩니다.
+- httpx 자동 계측을 통해 outbound 요청에 W3C `traceparent` 헤더가 자동 주입되어, 다른 서비스(backend-discovery 등)를 호출할 경우 동일 Trace로 연결됩니다.
+- Bedrock 모드에서는 Strands Agent가 전역 TracerProvider를 재사용해 `invoke_agent`, `chat`, `execute_event_loop_cycle` span을 자동 생성합니다. `librarian.recommendation` custom span은 fake 모드처럼 자동 계측이 없는 경우에도 agent 처리 구간의 latency/실패를 관측할 수 있도록 추가되었습니다.
+- 로그는 stdout으로 JSON 형식(`timestamp`, `level`, `service`, `logger`, `message`, `trace_id`, `span_id`, `exception`)으로 출력됩니다. Kubernetes에서는 Grafana Alloy가 stdout을 수집해 Loki로 전송하므로 별도 push client는 사용하지 않습니다.
+- 사용자 메시지, 프롬프트, LLM 응답 원문은 로그와 span에 기록되지 않습니다. Strands Agent의 `gen_ai.*` 콘텐츠는 redaction이 강제로 활성화되어 `[REDACTED]`로 대체됩니다.

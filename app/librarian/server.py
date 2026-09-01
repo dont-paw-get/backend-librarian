@@ -19,6 +19,7 @@ USE_BEDROCK=true 환경변수로 실제 Bedrock 에이전트와 fake 에이전�
 
 import asyncio
 import json
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -29,8 +30,24 @@ from fastapi.responses import StreamingResponse
 
 from app.librarian.main import handle_chat
 from app.librarian.memory.local import LocalMemoryStore
+from app.librarian.observability.logging_setup import setup_logging
+from app.librarian.observability.tracing import (
+    instrument_botocore,
+    instrument_fastapi,
+    instrument_httpx,
+    setup_tracing,
+)
 from app.librarian.schemas import ChatRequest, ChatResponse
 from app.librarian.tools.weather import OpenMeteoProvider
+
+# 로깅/트레이싱은 다른 모듈을 import하기 전, 프로세스 시작 시점에 가장 먼저 초기화한다.
+# (Strands Agent가 이후 get_tracer()로 전역 TracerProvider를 재사용하므로 순서가 중요하다.)
+setup_logging()
+setup_tracing()
+instrument_httpx()
+instrument_botocore()
+
+logger = logging.getLogger(__name__)
 
 # Bedrock 사용 여부
 _USE_BEDROCK = os.environ.get("USE_BEDROCK", "").lower() in ("true", "1", "yes")
@@ -57,14 +74,15 @@ async def _lifespan(_: FastAPI):
     if _USE_BEDROCK and check_bedrock_access is not None:
         ok, detail = check_bedrock_access()
         if ok:
-            print(f"[librarian] Bedrock 준비 완료 — {detail}")
+            logger.info("Bedrock access check succeeded", extra={"bedrock_detail": detail})
         else:
-            print(f"[librarian] Bedrock 사용 불가 — {detail}")
-            print("[librarian] MFA 세션 발급 후 재시작하세요:")
-            print("[librarian]   uv run python scripts/mfa_session.py <MFA코드>")
-            print("[librarian]   USE_BEDROCK=true AWS_PROFILE=mfa uv run uvicorn app.librarian.server:app --reload")
+            logger.error(
+                "Bedrock access check failed — MFA 세션 발급 필요 시 "
+                "'uv run python scripts/mfa_session.py <MFA코드>' 실행 후 재시작하세요",
+                extra={"bedrock_detail": detail},
+            )
     else:
-        print("[librarian] mock 모드로 실행 중입니다 (Bedrock 미사용).")
+        logger.info("Running in mock mode (Bedrock disabled)")
     yield
 
 
@@ -84,6 +102,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Switch-To", "X-Signals"],
 )
+
+# FastAPI 자동 계측 — /health 등 프로브 엔드포인트는 트레이스에서 제외한다.
+instrument_fastapi(app)
 
 # 싱글턴 인스턴스
 _memory = LocalMemoryStore(max_history=50)

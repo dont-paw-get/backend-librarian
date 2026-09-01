@@ -10,8 +10,12 @@
 7. 메모리 업데이트 후 ChatResponse 반환
 """
 
+import logging
 import re
 from uuid import uuid4
+
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 from app.librarian.curation.mood import (
     WeatherCondition,
@@ -48,6 +52,9 @@ _SWITCH_TAG_PATTERN = re.compile(r"\[전환제안:\s*([a-zA-Z0-9_-]+)\]")
 _STORK_ALIASES = ("황새 사서", "황새", "슈빌", "하루", "stork")
 # 고양이 사서 식별 별칭
 _CAT_ALIASES = ("고양이 사서", "고양이", "나비", "블루", "cat")
+
+logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer(__name__)
 
 
 async def handle_chat(
@@ -101,7 +108,12 @@ async def handle_chat(
         if weather_provider and latitude is not None and longitude is not None:
             try:
                 weather_result = await weather_provider.get_weather(latitude, longitude)
-            except Exception:
+            except Exception as exc:
+                # 날씨 조회 실패해도 대화는 계속 — 기본(CLEAR) 날씨로 폴백한다.
+                logger.warning(
+                    "Weather lookup failed; falling back to default condition",
+                    extra={"downstream_service": "open-meteo", "error_type": type(exc).__name__},
+                )
                 weather_result = None
                 location_source = "none"
 
@@ -143,8 +155,25 @@ async def handle_chat(
     }
 
     # 7. 에이전트 호출
+    # librarian.recommendation span: fake 모드(자동 계측 없음)에서도 agent 처리 구간(지연/실패)이
+    # 관측 가능하도록 하는 상위 span. Bedrock 모드에서는 Strands가 자동 생성하는
+    # `invoke_agent {agent_name}` span의 부모가 되어 오케스트레이션 관점의 latency를 함께 보여준다.
     if agent_callable:
-        raw_response = await agent_callable(request.message, context)
+        with _tracer.start_as_current_span("librarian.recommendation") as span:
+            span.set_attribute("librarian.id", request.librarian_id)
+            span.set_attribute("librarian.mood", mood.value)
+            try:
+                raw_response = await agent_callable(request.message, context)
+                span.set_attribute("librarian.result_status", "ok")
+            except Exception:
+                span.set_attribute("librarian.result_status", "error")
+                span.set_status(Status(StatusCode.ERROR))
+                logger.error(
+                    "Agent invocation failed",
+                    extra={"librarian_id": request.librarian_id},
+                    exc_info=True,
+                )
+                raise
     else:
         raw_response = f"[에이전트 미연결] 메시지 수신: {request.message}"
 
@@ -211,6 +240,16 @@ async def handle_chat(
         ConversationEntry(role="assistant", content=response_text, timestamp=timestamp),
     )
 
+    logger.info(
+        "Chat request completed",
+        extra={
+            "librarian_id": request.librarian_id,
+            "session_id": session_id,
+            "mood": mood.value,
+            "switch_to": switch_to.id if switch_to else None,
+        },
+    )
+
     return ChatResponse(
         message=response_text,
         session_id=session_id,
@@ -219,5 +258,3 @@ async def handle_chat(
         signals=signals,
         switch_to=switch_to,
     )
-
-
