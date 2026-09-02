@@ -23,8 +23,13 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 
 _module_logger = logging.getLogger(__name__)
 
-# 헬스체크/프로브 엔드포인트는 트레이스에서 제외한다 (FastAPI instrumentation의 excluded_urls).
-_EXCLUDED_URLS = "health,/health,/api/v1/health"
+# 헬스체크/프로브/메트릭 스크레이핑 엔드포인트는 트레이스에서 제외한다
+# (FastAPI instrumentation의 excluded_urls — 값은 정규식으로 search 매칭된다).
+# ADR-0007 #4: probe/스크레이핑 트레이스는 SDK 단에서 먼저 막는다.
+_EXCLUDED_URLS = (
+    "health,/health,/api/v1/health,/actuator/health,"
+    "/actuator/prometheus,/metrics,/livez,/readyz"
+)
 
 # Strands Agent가 gen_ai.input.messages / gen_ai.output.messages / gen_ai.system_instructions 등
 # prompt/response 원문을 span event에 기록하지 않도록 redaction을 강제로 켠다.

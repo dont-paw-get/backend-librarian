@@ -31,6 +31,7 @@ from fastapi.responses import StreamingResponse
 from app.librarian.main import handle_chat
 from app.librarian.memory.local import LocalMemoryStore
 from app.librarian.observability.logging_setup import setup_logging
+from app.librarian.observability.metrics import PrometheusMiddleware, render_latest_metrics
 from app.librarian.observability.tracing import (
     instrument_botocore,
     instrument_fastapi,
@@ -102,6 +103,11 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["X-Session-Id", "X-Librarian-Id", "X-Switch-To", "X-Signals"],
 )
+
+# Prometheus HTTP 메트릭 미들웨어 — 모든 요청의 지연/상태코드를 Micrometer 호환
+# 히스토그램(http_server_requests_seconds_*)에 기록한다. infra ServiceMonitor 가
+# /actuator/prometheus 를 30s 간격으로 스크레이핑한다.
+app.add_middleware(PrometheusMiddleware)
 
 # FastAPI 자동 계측 — /health 등 프로브 엔드포인트는 트레이스에서 제외한다.
 instrument_fastapi(app)
@@ -185,3 +191,14 @@ async def health_v1():
 async def health():
     """헬스체크 별칭."""
     return {"status": "ok", "mode": _mode}
+
+
+@app.get("/actuator/prometheus")
+async def actuator_prometheus():
+    """Prometheus 스크레이핑 엔드포인트 (Micrometer 호환 경로).
+
+    infra ServiceMonitor 가 이 경로를 스크레이핑한다. 응답에는
+    http_server_requests_seconds_count / _bucket 시계열이 application="<OTEL_SERVICE_NAME>"
+    라벨과 함께 포함된다.
+    """
+    return render_latest_metrics()
