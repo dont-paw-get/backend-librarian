@@ -1,0 +1,27 @@
+# dev 환경 전용 — infra(dpgy-infra)의 Prometheus(monitoring 네임스페이스)가
+# 이 서비스의 /actuator/prometheus 를 스크레이핑하도록 하는 ServiceMonitor.
+#
+# infra Prometheus 는 serviceMonitorSelectorNilUsesHelmValues=false 로 배포되어
+# 네임스페이스/라벨 셀렉터 제약이 없다. 아래 spec.selector 가 이 서비스의 Service
+# (backend-librarian) 에 매칭되기만 하면 스크레이핑된다.
+#
+# 메트릭은 애플리케이션과 동일한 http 포트(컨테이너 8000 → Service 80)의
+# /actuator/prometheus 경로로 노출된다. 별도 메트릭 포트를 두지 않는다.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend-librarian
+  labels:
+    app.kubernetes.io/name: backend-librarian
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: backend-librarian
+  namespaceSelector:
+    matchNames:
+      - dpyb-librarian-dev
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+      scheme: http

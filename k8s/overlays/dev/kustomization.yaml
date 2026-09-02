@@ -6,6 +6,9 @@ namespace: dpyb-librarian-dev
 
 resources:
   - ../../base
+  # dev 전용: infra Prometheus 가 /actuator/prometheus 를 스크레이핑하도록 하는 ServiceMonitor.
+  # monitoring 스택은 dev 클러스터에만 있으므로 base 가 아닌 이 overlay 에 둔다.
+  - servicemonitor.yaml
 
 # 개발은 1개만
 replicas:

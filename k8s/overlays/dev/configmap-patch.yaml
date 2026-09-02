@@ -6,6 +6,21 @@ metadata:
 data:
   APP_ENV: 'development'
   DEPLOYMENT_ENV: 'dev'
+
+  # --- OpenTelemetry 트레이스 (infra OTel Collector, monitoring 네임스페이스) ---
+  # application 메트릭 태그(http_server_requests_seconds{application=...})와 반드시 동일해야
+  # RCA Agent 가 메트릭 ↔ 로그 ↔ 트레이스를 같은 서비스로 상관분석한다.
   OTEL_SERVICE_NAME: 'backend-librarian'
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://otel-collector.monitoring.svc.cluster.local:4318'
+  # infra Collector 는 gRPC(4317) 미개방. 반드시 http/protobuf + 4318.
+  OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf'
   OTEL_TRACES_SAMPLER_ARG: '1.0'
+  # infra Collector 는 traces 파이프라인만 받는다. 메트릭은 /actuator/prometheus(Prometheus),
+  # 로그는 stdout(Alloy→Loki) 경로를 쓰므로 OTLP metrics/logs export 는 끈다.
+  OTEL_METRICS_EXPORTER: 'none'
+  OTEL_LOGS_EXPORTER: 'none'
+
+  # --- Bedrock ---
+  # 베어 모델 ID(anthropic.claude-3-5-sonnet-20240620-v1:0)는 ap-northeast-2 에서
+  # on-demand 호출이 거부되므로 APAC 크로스리전 inference profile 로 교체한다.
+  BEDROCK_MODEL_ID: 'apac.anthropic.claude-3-5-sonnet-20240620-v1:0'
