@@ -67,7 +67,48 @@ prod에 트레이싱을 켜려면 별도로 `OTEL_EXPORTER_OTLP_ENDPOINT`,
 `OTEL_TRACES_SAMPLER_ARG`(prod는 보통 1.0보다 낮은 값 권장) 등을 dpgy-infra의
 prod 설정에 추가하는 별도 작업이 필요하다.
 
-## 4. OTel Metrics / Prometheus ServiceMonitor는 구현하지 않음
+## 4. Prometheus HTTP 메트릭 / ServiceMonitor (CLIAR-222 후속으로 추가됨)
 
-요청 범위에서 명시적으로 제외되었다. 트레이싱(spans)과 로깅(logs)만 구현했고,
-메트릭(metrics) 파이프라인은 다루지 않았다.
+> 최초 CLIAR-222 범위에서는 메트릭이 제외되어 있었으나, infra 의 "HTTP 5xx 에러율" /
+> "p99 레이턴시" 알림 규칙이 이 서비스의 Micrometer 형식 메트릭을 전제로 하므로 후속 작업에서 추가했다.
+
+**구현 방식** (`app/librarian/observability/metrics.py`):
+- FastAPI(비-Spring) 서비스지만 Spring Boot / Micrometer 와 **동일한 메트릭 이름·라벨**을
+  노출한다. `prometheus_client.Histogram("http_server_requests_seconds", ...)` 하나가
+  `http_server_requests_seconds_count` / `_sum` / `_bucket` 시계열을 파생하며,
+  `_bucket` 이 있어 `histogram_quantile()` 기반 p99 알림이 그대로 동작한다.
+- 라벨: `application`(= `OTEL_SERVICE_NAME` = `backend-librarian`), `method`, `uri`,
+  `status`, `outcome`(Micrometer 분류: SUCCESS / CLIENT_ERROR / SERVER_ERROR ...).
+- 순수 ASGI 미들웨어(`PrometheusMiddleware`)로 모든 요청을 계측한다.
+  `BaseHTTPMiddleware` 를 피해 `stream=true` StreamingResponse 와의 충돌을 방지한다.
+- `/actuator/prometheus` 로 노출(Micrometer 호환 경로). 헬스체크/스크레이핑/probe 경로는
+  집계에서 제외한다(트레이스 `_EXCLUDED_URLS` 정책과 일치).
+- 매핑되지 않은 경로(스캐너 등)는 `uri="NOT_FOUND"` 로 접어 카디널리티를 방어한다.
+
+**스크레이핑** (`k8s/overlays/dev/servicemonitor.yaml`):
+- `ServiceMonitor/backend-librarian` (namespace `dpyb-librarian-dev`), `interval: 30s`,
+  `path: /actuator/prometheus`, Service 의 `http` 포트(8000) 대상.
+- monitoring 스택은 dev 클러스터에만 있으므로 base 가 아닌 dev overlay 에만 둔다.
+
+**이 레포 밖**: Prometheus 가 실제로 이 ServiceMonitor 를 픽업하는지(=
+`serviceMonitorSelectorNilUsesHelmValues=false` 설정, RBAC)는 dpgy-infra 책임이다.
+
+## 5. OTLP 프로토콜/파이프라인 명시 (dev overlay)
+
+`OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, `OTEL_METRICS_EXPORTER=none`,
+`OTEL_LOGS_EXPORTER=none` 를 dev configmap 에 추가했다. infra Collector 는 traces
+파이프라인만 받고 gRPC(4317)는 미개방이므로 http/protobuf + 4318 를 강제한다.
+메트릭은 Prometheus 스크레이핑, 로그는 stdout→Alloy→Loki 경로를 쓰므로 OTLP
+metrics/logs export 는 끈다.
+
+## 6. Bedrock 모델 ID — inference profile 로 교체 (dev overlay)
+
+`anthropic.claude-3-5-sonnet-20240620-v1:0`(베어 ID)는 ap-northeast-2 에서 on-demand
+호출이 거부되므로 dev configmap 에서 `apac.anthropic.claude-3-5-sonnet-20240620-v1:0`
+(APAC 크로스리전 inference profile)로 덮어썼다.
+
+- **아직 남은 것**: `app/librarian/agent.py` 의 `DEFAULT_MODEL_ID` 와 `k8s/base/configmap.yaml`
+  은 여전히 베어 ID 다. prod overlay 가 활성화될 때 동일하게 inference profile 로 바꿔야 한다.
+  (이번 작업 범위가 dev 한정이라 base/code 기본값은 건드리지 않았다.)
+- `top_p` 등 deprecated 파라미터나 assistant prefill 은 코드에서 사용하지 않는다(`BedrockModel`
+  에 `model_id` / `region_name` 만 전달).

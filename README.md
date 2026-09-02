@@ -216,10 +216,26 @@ uv run pytest -q
 | AWS_PROFILE | MFA 세션 프로필 | - |
 | AWS_REGION | Bedrock 리전 | ap-northeast-2 |
 | BEDROCK_MODEL_ID | Bedrock 모델 ID | anthropic.claude-3-5-sonnet-20240620-v1:0 |
-| OTEL_SERVICE_NAME | 트레이스/로그의 서비스 이름 | backend-librarian |
+| OTEL_SERVICE_NAME | 트레이스/로그의 서비스 이름 **및 `/actuator/prometheus` 의 `application` 라벨** | backend-librarian |
 | OTEL_EXPORTER_OTLP_ENDPOINT | OTLP HTTP Collector 엔드포인트. 설정 시에만 트레이스 전송 활성화 | 미설정(exporter 비활성화) |
+| OTEL_EXPORTER_OTLP_PROTOCOL | OTLP 전송 프로토콜 (infra Collector 는 `http/protobuf` + 4318) | http/protobuf |
 | OTEL_TRACES_SAMPLER_ARG | 트레이스 샘플링 비율 (0.0~1.0) | 1.0 |
 | LOG_LEVEL | 루트 로거 레벨 | INFO |
+
+## Prometheus 메트릭 (`/actuator/prometheus`)
+
+- FastAPI 서비스지만 Spring Boot / Micrometer 와 **동일한 메트릭 이름·라벨**로 HTTP 요청 수/지연을
+  노출합니다: `http_server_requests_seconds_count` / `_sum` / `_bucket`
+  (라벨: `application`, `method`, `uri`, `status`, `outcome`). infra 의 5xx 에러율·p99 레이턴시
+  알림 규칙(Micrometer 기준)이 수정 없이 동작합니다.
+- `application` 라벨 = `OTEL_SERVICE_NAME` — 메트릭 ↔ 로그 ↔ 트레이스 상관분석 키.
+- dev 클러스터에서는 `k8s/overlays/dev/servicemonitor.yaml` 의 `ServiceMonitor` 가 이 경로를
+  30초 간격으로 스크레이핑합니다.
+- `/health`, `/actuator/prometheus`, `/livez`, `/readyz` 등 probe·스크레이핑 경로는 집계에서 제외됩니다.
+
+```bash
+curl -s http://localhost:8000/actuator/prometheus | grep http_server_requests_seconds_count
+```
 
 ## 분산 트레이싱 / 구조화 로깅
 
