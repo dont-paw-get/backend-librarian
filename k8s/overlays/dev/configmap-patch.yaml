@@ -4,4 +4,8 @@ kind: ConfigMap
 metadata:
   name: backend-librarian-config
 data:
-  APP_ENV: "development"
+  APP_ENV: 'development'
+  DEPLOYMENT_ENV: 'dev'
+  OTEL_SERVICE_NAME: 'backend-librarian'
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'http://otel-collector.monitoring.svc.cluster.local:4318'
+  OTEL_TRACES_SAMPLER_ARG: '1.0'
