@@ -6,10 +6,12 @@ import respx
 
 from app.librarian.curation.mood import WeatherCondition
 from app.librarian.tools.weather import (
+    RAIN_THRESHOLD_MM,
     OpenMeteoProvider,
     WeatherResult,
     _wmo_to_condition,
     is_valid_coordinates,
+    resolve_condition,
 )
 
 
@@ -45,7 +47,7 @@ class TestWmoToCondition:
             (61, WeatherCondition.RAINY),
             (73, WeatherCondition.SNOWY),
             (95, WeatherCondition.STORMY),
-            (999, WeatherCondition.CLEAR),  # 알 수 없는 코드 → 기본값
+            (999, WeatherCondition.CLOUDY),  # 알 수 없는 코드 → 중립값(흐림)
         ],
     )
     def test_code_mapping(self, code: int, expected_condition: WeatherCondition):
@@ -55,6 +57,37 @@ class TestWmoToCondition:
     def test_description_is_korean(self):
         _, desc = _wmo_to_condition(61)
         assert desc == "가벼운 비"
+
+
+class TestResolveCondition:
+    """WMO 코드 + 실측 강수량(mm) 병행 판정 검증."""
+
+    def test_light_drizzle_below_threshold_is_downgraded_to_cloudy(self):
+        """이슬비 코드(51)라도 강수량이 임계값 미만이면 CLOUDY로 강등한다."""
+        condition, _ = resolve_condition(51, precipitation_mm=0.1)
+        assert condition == WeatherCondition.CLOUDY
+
+    def test_rain_at_or_above_threshold_stays_rainy(self):
+        """강수량이 임계값 이상이면 RAINY를 유지한다."""
+        condition, _ = resolve_condition(61, precipitation_mm=RAIN_THRESHOLD_MM)
+        assert condition == WeatherCondition.RAINY
+
+    def test_meaningful_rain_stays_rainy(self):
+        """실제로 비가 오는 수준(보통 비)이면 RAINY."""
+        condition, _ = resolve_condition(63, precipitation_mm=3.0)
+        assert condition == WeatherCondition.RAINY
+
+    def test_missing_precipitation_keeps_code_based_result(self):
+        """강수량 정보가 없으면(None) 코드 기반 판정을 그대로 유지한다."""
+        condition, _ = resolve_condition(61, precipitation_mm=None)
+        assert condition == WeatherCondition.RAINY
+
+    def test_non_rainy_code_is_not_affected_by_precipitation(self):
+        """비 계열이 아닌 코드는 강수량과 무관하게 그대로 둔다."""
+        clear, _ = resolve_condition(0, precipitation_mm=0.0)
+        assert clear == WeatherCondition.CLEAR
+        snowy, _ = resolve_condition(73, precipitation_mm=0.0)
+        assert snowy == WeatherCondition.SNOWY
 
 
 class TestOpenMeteoProvider:
@@ -135,3 +168,46 @@ class TestOpenMeteoProvider:
 
         assert result.condition == WeatherCondition.SNOWY
         assert result.temperature == -2.0
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_weather_light_drizzle_downgraded_by_precipitation(self):
+        """이슬비 코드지만 실측 강수량이 미미하면 CLOUDY로 강등한다 (과분류 방지)."""
+        mock_response = {
+            "current": {
+                "temperature_2m": 29.9,
+                "weather_code": 51,  # 코드상 '가벼운 이슬비'
+                "precipitation": 0.1,  # 실제로는 거의 안 옴
+            }
+        }
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
+
+        async with httpx.AsyncClient() as client:
+            provider = OpenMeteoProvider(client=client)
+            result = await provider.get_weather(37.4953, 127.1221)
+
+        assert result.condition == WeatherCondition.CLOUDY
+        assert result.temperature == 29.9
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_weather_real_rain_stays_rainy(self):
+        """실제 강수량이 충분하면 RAINY를 유지한다."""
+        mock_response = {
+            "current": {
+                "temperature_2m": 18.0,
+                "weather_code": 63,  # 보통 비
+                "precipitation": 3.2,
+            }
+        }
+        respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
+
+        async with httpx.AsyncClient() as client:
+            provider = OpenMeteoProvider(client=client)
+            result = await provider.get_weather(37.5665, 126.9780)
+
+        assert result.condition == WeatherCondition.RAINY

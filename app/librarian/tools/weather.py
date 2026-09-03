@@ -63,9 +63,46 @@ _WMO_CODE_MAP: dict[int, tuple[WeatherCondition, str]] = {
 }
 
 
+# === 강수량 임계값 (mm, 직전 1시간 누적) ===
+# Open-Meteo의 weather_code는 이슬비/가벼운 소나기(51/53/55/80 등)도 전부 "비"로
+# 분류하므로, 코드만 신뢰하면 실제로는 거의 안 오는 이슬비도 RAINY가 된다.
+# 기상 관측 표준상 이슬비(drizzle)는 강수율 약 1mm/h 이하이고, "약한 비(light rain)"의
+# 하한도 대략 이 부근이다. 따라서 코드가 비 계열이어도 실측 강수량이 이 값 미만이면
+# 실질 강수로 보지 않고 CLOUDY로 강등한다.
+# 참고: Open-Meteo `precipitation`은 직전 1시간 누적(mm)이라 mm/h로 해석 가능하고,
+# `precipitation_probability`(>0.1mm 기준)의 하한과도 정합적이다.
+RAIN_THRESHOLD_MM = 0.5
+
+
 def _wmo_to_condition(code: int) -> tuple[WeatherCondition, str]:
-    """WMO 코드를 WeatherCondition과 한국어 설명으로 변환."""
-    return _WMO_CODE_MAP.get(code, (WeatherCondition.CLEAR, "알 수 없음"))
+    """WMO 코드를 WeatherCondition과 한국어 설명으로 변환.
+
+    미지의 코드는 CLEAR(맑음)로 낙관하지 않고 CLOUDY(흐림)로 처리한다.
+    데이터가 없을 때 "맑음"으로 단정하면 실제 날씨와 어긋나 사서가 잘못된 안내를
+    할 수 있으므로, 중립적인 "흐림"을 기본값으로 둔다.
+    """
+    return _WMO_CODE_MAP.get(code, (WeatherCondition.CLOUDY, "알 수 없음"))
+
+
+def resolve_condition(
+    weather_code: int, precipitation_mm: float | None
+) -> tuple[WeatherCondition, str]:
+    """WMO 코드와 실측 강수량(mm)을 함께 고려해 최종 날씨 상태를 결정한다.
+
+    코드상 비(RAINY)로 분류됐더라도 실제 강수량이 이슬비 수준(RAIN_THRESHOLD_MM 미만)에
+    그치면, 지나가는 이슬비/약한 소나기를 "비 오는 날"로 과장하지 않도록 CLOUDY로 강등한다.
+    강수량 정보가 없으면(None) 기존 코드 기반 판정을 그대로 유지한다.
+    """
+    condition, description = _wmo_to_condition(weather_code)
+
+    if (
+        condition == WeatherCondition.RAINY
+        and precipitation_mm is not None
+        and precipitation_mm < RAIN_THRESHOLD_MM
+    ):
+        return WeatherCondition.CLOUDY, "구름 많음 (약한 비 기운)"
+
+    return condition, description
 
 
 # === 메시지 텍스트 → 날씨 감지 ===
@@ -123,7 +160,7 @@ class OpenMeteoProvider(WeatherProvider):
         params = {
             "latitude": latitude,
             "longitude": longitude,
-            "current": "temperature_2m,weather_code",
+            "current": "temperature_2m,weather_code,precipitation",
             "timezone": "auto",
         }
 
@@ -139,8 +176,10 @@ class OpenMeteoProvider(WeatherProvider):
         current = data["current"]
         temperature = current["temperature_2m"]
         weather_code = current["weather_code"]
+        # precipitation은 구버전 응답/일부 모델에서 누락될 수 있으므로 방어적으로 읽는다.
+        precipitation = current.get("precipitation")
 
-        condition, description = _wmo_to_condition(weather_code)
+        condition, description = resolve_condition(weather_code, precipitation)
 
         return WeatherResult(
             temperature=temperature,
