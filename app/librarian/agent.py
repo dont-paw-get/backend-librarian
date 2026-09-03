@@ -14,8 +14,9 @@ from strands.models import BedrockModel
 from app.librarian.personas.cat import get_cat_system_prompt
 from app.librarian.personas.stork import get_stork_system_prompt
 
-# 교육 계정(ap-northeast-2)에서 호출 가능한 것으로 확인된 조합
-DEFAULT_MODEL_ID = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+# 베어 모델 ID 는 ap-northeast-2 on-demand 호출이 거부되므로 크로스리전
+# inference profile 을 기본값으로 둔다. global. 프로파일은 전 리전 라우팅.
+DEFAULT_MODEL_ID = "global.anthropic.claude-sonnet-5"
 DEFAULT_REGION = "ap-northeast-2"
 
 

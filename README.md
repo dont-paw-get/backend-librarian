@@ -215,7 +215,7 @@ uv run pytest -q
 | USE_BEDROCK | true면 Bedrock 호출, 미설정이면 fake 에이전트 | 미설정(mock) |
 | AWS_PROFILE | MFA 세션 프로필 | - |
 | AWS_REGION | Bedrock 리전 | ap-northeast-2 |
-| BEDROCK_MODEL_ID | Bedrock 모델 ID | anthropic.claude-3-5-sonnet-20240620-v1:0 |
+| BEDROCK_MODEL_ID | Bedrock 모델 ID (크로스리전 inference profile) | global.anthropic.claude-sonnet-5 |
 | OTEL_SERVICE_NAME | 트레이스/로그의 서비스 이름 **및 `/actuator/prometheus` 의 `application` 라벨** | backend-librarian |
 | OTEL_EXPORTER_OTLP_ENDPOINT | OTLP HTTP Collector 엔드포인트. 설정 시에만 트레이스 전송 활성화 | 미설정(exporter 비활성화) |
 | OTEL_EXPORTER_OTLP_PROTOCOL | OTLP 전송 프로토콜 (infra Collector 는 `http/protobuf` + 4318) | http/protobuf |

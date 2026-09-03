@@ -6,6 +6,9 @@ import boto3
 from botocore.exceptions import ClientError
 
 CANDIDATE_MODELS = [
+    # 현재 기본값 (global 크로스리전 inference profile)
+    ("ap-northeast-2", "global.anthropic.claude-sonnet-5"),
+    ("ap-northeast-2", "apac.anthropic.claude-sonnet-5"),
     ("ap-northeast-2", "apac.anthropic.claude-3-5-sonnet-20241022-v2:0"),
     ("ap-northeast-2", "anthropic.claude-3-5-sonnet-20241022-v2:0"),
     ("ap-northeast-2", "anthropic.claude-3-5-sonnet-20240620-v1:0"),

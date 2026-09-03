@@ -101,14 +101,17 @@ prod 설정에 추가하는 별도 작업이 필요하다.
 메트릭은 Prometheus 스크레이핑, 로그는 stdout→Alloy→Loki 경로를 쓰므로 OTLP
 metrics/logs export 는 끈다.
 
-## 6. Bedrock 모델 ID — inference profile 로 교체 (dev overlay)
+## 6. Bedrock 모델 ID — global 크로스리전 inference profile
 
-`anthropic.claude-3-5-sonnet-20240620-v1:0`(베어 ID)는 ap-northeast-2 에서 on-demand
-호출이 거부되므로 dev configmap 에서 `apac.anthropic.claude-3-5-sonnet-20240620-v1:0`
-(APAC 크로스리전 inference profile)로 덮어썼다.
+베어 모델 ID 는 ap-northeast-2 에서 on-demand 호출이 거부되므로 크로스리전
+inference profile 로 호출한다. 현재 `global.anthropic.claude-sonnet-5`(global 크로스리전
+프로파일, 전 리전 라우팅)를 쓴다.
 
-- **아직 남은 것**: `app/librarian/agent.py` 의 `DEFAULT_MODEL_ID` 와 `k8s/base/configmap.yaml`
-  은 여전히 베어 ID 다. prod overlay 가 활성화될 때 동일하게 inference profile 로 바꿔야 한다.
-  (이번 작업 범위가 dev 한정이라 base/code 기본값은 건드리지 않았다.)
+- **적용 범위**: dev configmap(`k8s/overlays/dev/configmap-patch.yaml`), base configmap
+  (`k8s/base/configmap.yaml`, prod 상속), `app/librarian/agent.py` 의 `DEFAULT_MODEL_ID`
+  까지 모두 동일한 global 프로파일로 통일했다.
+- **전제**: 계정에서 Claude Sonnet 5 model access 가 enable 되어 있고
+  `global.anthropic.claude-sonnet-5` 프로파일이 존재해야 한다
+  (`aws bedrock list-inference-profiles` 로 확인).
 - `top_p` 등 deprecated 파라미터나 assistant prefill 은 코드에서 사용하지 않는다(`BedrockModel`
   에 `model_id` / `region_name` 만 전달).

@@ -10,7 +10,9 @@ data:
   APP_ENV: "production"
   # Bedrock 사용 (Secret 으로 AWS 자격증명 주입). mock 으로 띄우려면 "" 로 비웁니다.
   USE_BEDROCK: "true"
-  # 교육 계정에서 호출 가능한 것으로 확인된 리전/모델 (app/librarian/agent.py 기본값과 일치)
+  # 리전/모델 (app/librarian/agent.py 기본값과 일치)
+  # 베어 모델 ID 는 ap-northeast-2 on-demand 호출이 거부되므로 global. 크로스리전
+  # inference profile 을 쓴다 (전 리전 라우팅).
   AWS_REGION: "ap-northeast-2"
   AWS_DEFAULT_REGION: "ap-northeast-2"
-  BEDROCK_MODEL_ID: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+  BEDROCK_MODEL_ID: "global.anthropic.claude-sonnet-5"
