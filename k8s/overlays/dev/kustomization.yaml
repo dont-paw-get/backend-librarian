@@ -19,7 +19,7 @@ replicas:
 images:
   - name: backend-librarian
     newName: 594532711953.dkr.ecr.ap-northeast-2.amazonaws.com/dpyb-dev/dpyb-librarian
-    newTag: 88ca570f4a1687809c479d3d0493ed1c4dcab48b
+    newTag: 73ddebc092bd467f681ae6277067ec703ea42880
 
 # 개발 환경에서 달라지는 설정값만 덮어씀
 patches:
