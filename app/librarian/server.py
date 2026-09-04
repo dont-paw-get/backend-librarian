@@ -24,6 +24,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -65,26 +66,34 @@ else:
     _mode = "mock"
     check_bedrock_access = None
 
-# 스트리밍 청크 크기 및 간격 (타이핑 효과)
+# 스트리밍 청크 크기 및 간격 (타이핑 효과: 지연 최소화 0.008초)
 _STREAM_CHUNK_SIZE = 12
-_STREAM_DELAY_SECONDS = 0.02
+_STREAM_DELAY_SECONDS = 0.008
+
+# 싱글턴 인스턴스
+_memory = LocalMemoryStore(max_history=50)
+_weather = OpenMeteoProvider()
+
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):
-    """시작 시 Bedrock 자격증명 상태를 점검해 로그로 알립니다."""
-    if _USE_BEDROCK and check_bedrock_access is not None:
-        ok, detail = check_bedrock_access()
-        if ok:
-            logger.info("Bedrock access check succeeded", extra={"bedrock_detail": detail})
+    """시작 시 Bedrock 자격증명 상태 점검 및 공유 HTTP 클라이언트를 관리합니다."""
+    async with httpx.AsyncClient(timeout=10.0) as http_client:
+        _weather._client = http_client
+        if _USE_BEDROCK and check_bedrock_access is not None:
+            ok, detail = check_bedrock_access()
+            if ok:
+                logger.info("Bedrock access check succeeded", extra={"bedrock_detail": detail})
+            else:
+                logger.error(
+                    "Bedrock access check failed — MFA 세션 발급 필요 시 "
+                    "'uv run python scripts/mfa_session.py <MFA코드>' 실행 후 재시작하세요",
+                    extra={"bedrock_detail": detail},
+                )
         else:
-            logger.error(
-                "Bedrock access check failed — MFA 세션 발급 필요 시 "
-                "'uv run python scripts/mfa_session.py <MFA코드>' 실행 후 재시작하세요",
-                extra={"bedrock_detail": detail},
-            )
-    else:
-        logger.info("Running in mock mode (Bedrock disabled)")
-    yield
+            logger.info("Running in mock mode (Bedrock disabled)")
+        yield
+        _weather._client = None
 
 
 app = FastAPI(
@@ -112,9 +121,6 @@ app.add_middleware(PrometheusMiddleware)
 # FastAPI 자동 계측 — /health 등 프로브 엔드포인트는 트레이스에서 제외한다.
 instrument_fastapi(app)
 
-# 싱글턴 인스턴스
-_memory = LocalMemoryStore(max_history=50)
-_weather = OpenMeteoProvider()
 
 
 async def _run_chat(request: ChatRequest) -> ChatResponse:

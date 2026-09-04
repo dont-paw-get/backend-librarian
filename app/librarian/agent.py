@@ -28,11 +28,16 @@ def _resolve_region(region: str | None = None) -> str:
     return region or os.environ.get("AWS_REGION") or DEFAULT_REGION
 
 
-def _create_model(model_id: str | None = None, region: str | None = None) -> BedrockModel:
+def _create_model(
+    model_id: str | None = None,
+    region: str | None = None,
+    max_tokens: int = 400,
+) -> BedrockModel:
     """Bedrock 모델 인스턴스를 생성합니다."""
     return BedrockModel(
         model_id=_resolve_model_id(model_id),
         region_name=_resolve_region(region),
+        max_tokens=max_tokens,
     )
 
 
