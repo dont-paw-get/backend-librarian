@@ -104,14 +104,14 @@ metrics/logs export 는 끈다.
 ## 6. Bedrock 모델 ID — global 크로스리전 inference profile
 
 베어 모델 ID 는 ap-northeast-2 에서 on-demand 호출이 거부되므로 크로스리전
-inference profile 로 호출한다. 현재 `global.anthropic.claude-sonnet-5`(global 크로스리전
+inference profile 로 호출한다. 현재 `global.anthropic.claude-haiku-4-5-20251001-v1:0`(global 크로스리전
 프로파일, 전 리전 라우팅)를 쓴다.
 
 - **적용 범위**: dev configmap(`k8s/overlays/dev/configmap-patch.yaml`), base configmap
   (`k8s/base/configmap.yaml`, prod 상속), `app/librarian/agent.py` 의 `DEFAULT_MODEL_ID`
   까지 모두 동일한 global 프로파일로 통일했다.
-- **전제**: 계정에서 Claude Sonnet 5 model access 가 enable 되어 있고
-  `global.anthropic.claude-sonnet-5` 프로파일이 존재해야 한다
+- **전제**: 계정에서 Claude Haiku 4.5 model access 가 enable 되어 있고
+  `global.anthropic.claude-haiku-4-5-20251001-v1:0` 프로파일이 존재해야 한다
   (`aws bedrock list-inference-profiles` 로 확인).
 - `top_p` 등 deprecated 파라미터나 assistant prefill 은 코드에서 사용하지 않는다(`BedrockModel`
   에 `model_id` / `region_name` 만 전달).

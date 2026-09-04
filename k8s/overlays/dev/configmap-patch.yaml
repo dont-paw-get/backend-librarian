@@ -24,4 +24,4 @@ data:
   # 베어 모델 ID는 ap-northeast-2 에서 on-demand 호출이 거부되므로 크로스리전
   # inference profile 로 호출한다. global. 프로파일은 전 리전으로 라우팅되어
   # APAC 프로파일보다 가용성이 넓다.
-  BEDROCK_MODEL_ID: 'global.anthropic.claude-sonnet-5'
+  BEDROCK_MODEL_ID: 'global.anthropic.claude-haiku-4-5-20251001-v1:0'

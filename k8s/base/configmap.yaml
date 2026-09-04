@@ -15,4 +15,4 @@ data:
   # inference profile 을 쓴다 (전 리전 라우팅).
   AWS_REGION: "ap-northeast-2"
   AWS_DEFAULT_REGION: "ap-northeast-2"
-  BEDROCK_MODEL_ID: "global.anthropic.claude-sonnet-5"
+  BEDROCK_MODEL_ID: "global.anthropic.claude-haiku-4-5-20251001-v1:0"
