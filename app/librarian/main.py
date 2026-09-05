@@ -41,9 +41,9 @@ from app.librarian.tools.weather import (
     is_valid_coordinates,
 )
 
-# 기본 위치 (서울) — 좌표/텍스트 날씨가 모두 없을 때 폴백
-_DEFAULT_LAT = 37.5665
-_DEFAULT_LON = 126.9780
+# 기본 위치 (송파 교육장) — 좌표/텍스트 날씨가 모두 없을 때 폴백
+_DEFAULT_LAT = 37.5145
+_DEFAULT_LON = 127.1058
 
 # 전환 제안 태그 패턴
 _SWITCH_TAG_PATTERN = re.compile(r"\[전환제안:\s*([a-zA-Z0-9_-]+)\]")

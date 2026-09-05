@@ -10,6 +10,7 @@ from app.librarian.tools.weather import (
     OpenMeteoProvider,
     WeatherResult,
     _wmo_to_condition,
+    detect_weather_from_text,
     is_valid_coordinates,
     resolve_condition,
 )
@@ -237,3 +238,32 @@ class TestOpenMeteoProvider:
         assert res1 == res2
         # API는 1회만 호출되어야 함
         assert route.call_count == 1
+
+
+class TestDetectWeatherFromText:
+    """메시지 텍스트 기반 날씨 감지 테스트."""
+
+    def test_direct_statements_are_detected(self):
+        """명확한 날씨 서술/단정은 올바른 WeatherCondition으로 반환."""
+        assert detect_weather_from_text("오늘 비 오는 날 읽을 책") == WeatherCondition.RAINY
+        assert detect_weather_from_text("비가 많이 오네") == WeatherCondition.RAINY
+        assert detect_weather_from_text("눈이 펑펑 내려") == WeatherCondition.SNOWY
+        assert detect_weather_from_text("날씨가 참 맑음") == WeatherCondition.CLEAR
+        assert detect_weather_from_text("오늘 흐림이야") == WeatherCondition.CLOUDY
+
+    def test_weather_questions_are_not_detected_as_stated_condition(self):
+        """질문/의문문('비 와?', '비 오나요?', '날씨 어때?')은 text_stated로 단정하지 않고 None 반환."""
+        assert detect_weather_from_text("비 와?") is None
+        assert detect_weather_from_text("밖에 비 오나요?") is None
+        assert detect_weather_from_text("오늘 비 내리나") is None
+        assert detect_weather_from_text("눈 오는지 궁금해") is None
+        assert detect_weather_from_text("오늘 날씨 어때?") is None
+        assert detect_weather_from_text("비 올까?") is None
+
+    def test_unrelated_words_with_substrings_are_not_detected(self):
+        """'비밀', '준비', '눈치' 등 무관한 단어의 단일 글자 오탐 방지."""
+        assert detect_weather_from_text("비밀 이야기 들려줘") is None
+        assert detect_weather_from_text("시험 준비 중이야") is None
+        assert detect_weather_from_text("소비 습관에 관한 책") is None
+        assert detect_weather_from_text("눈치 보지 않는 법") is None
+        assert detect_weather_from_text("안녕 반가워") is None
