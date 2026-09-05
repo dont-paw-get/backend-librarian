@@ -278,8 +278,7 @@ backend-librarian/
 │       ├── metrics.py       # Prometheus Micrometer 호환 메트릭
 │       └── tracing.py       # OTel 트레이서 설정 및 httpx/Bedrock 계측
 ├── docs/
-│   ├── INTEGRATION_MANUAL.md # 사서 연동 & 아키텍처 상세 명세서
-│   └── observability-notes.md# 관측 가능성 설계 노트
+│   └── INTEGRATION_MANUAL.md # 사서 연동 & 아키텍처 상세 명세서
 ├── k8s/                     # Kubernetes Kustomize 배포 매니페스트 (base, overlays/dev)
 ├── tests/                   # 226 tests (100% passed)
 ├── scripts/
@@ -456,8 +455,6 @@ uv run pytest -q
 - **메트릭**: Prometheus (`/actuator/prometheus`) - Spring Boot Micrometer 호환 규격으로 HTTP 요청 지연/에러율 수집 (`ServiceMonitor` 30초 스크레이핑)
 - **트레이싱**: OpenTelemetry (OTLP) - W3C `traceparent` 헤더 전파로 디스커버리(`backend-discovery`) 연동 분산 추적 (Grafana Tempo)
 - **로깅**: 구조화 JSON 로깅 (Grafana Alloy + Loki 수집, PII 및 LLM 원문 `[REDACTED]` 마스킹)
-
-> 세부 인프라 연동 규격 및 구현 한계점은 [`docs/observability-notes.md`](docs/observability-notes.md)를 참고하세요.
 
 ---
 
