@@ -4,30 +4,34 @@ fake_agent.py를 대체하여 실제 LLM으로 응답을 생성합니다.
 handle_chat의 agent_callable 인터페이스에 맞춥니다.
 """
 
+import asyncio
 import logging
 import re
 
-from app.librarian.agent import build_cat_agent, build_stork_agent
+from app.librarian.agent import _create_model, build_cat_agent, build_stork_agent
 
 logger = logging.getLogger(__name__)
 
-# 에이전트 싱글턴 (서버 수명 내 재사용)
-_cat_agent = None
-_stork_agent = None
+# BedrockModel 인스턴스 싱글턴 (boto3 client 및 설정 재사용, thread-safe stateless)
+_shared_model = None
 
 
-def _get_cat_agent():
-    global _cat_agent
-    if _cat_agent is None:
-        _cat_agent = build_cat_agent()
-    return _cat_agent
+def _get_shared_model():
+    global _shared_model
+    if _shared_model is None:
+        _shared_model = _create_model()
+    return _shared_model
 
 
-def _get_stork_agent():
-    global _stork_agent
-    if _stork_agent is None:
-        _stork_agent = build_stork_agent()
-    return _stork_agent
+def _create_cat_agent():
+    # strands.Agent는 conversation_manager에 대화 내역(self.messages)을 누적하고
+    # 동시 실행 시 락 충돌(ConcurrentInvocationMode.THROW)이 발생하므로,
+    # 요청마다 격리된 Agent 인스턴스를 생성한다 (shared model을 전달하므로 생성 비용 ~0.8ms).
+    return build_cat_agent(model=_get_shared_model())
+
+
+def _create_stork_agent():
+    return build_stork_agent(model=_get_shared_model())
 
 
 def _build_prompt(message: str, context: dict, librarian_id: str = "cat") -> str:
@@ -165,11 +169,11 @@ async def bedrock_cat_agent(message: str, context: dict) -> str:
     """
     from app.librarian.fake_agent import fake_cat_agent
 
-    agent = _get_cat_agent()
+    agent = _create_cat_agent()
     prompt = _build_prompt(message, context, librarian_id="cat")
 
     try:
-        result = agent(prompt)
+        result = await asyncio.to_thread(agent, prompt)
         return _strip_thinking(str(result))
     except Exception as e:
         _log_agent_failure("cat", e)
@@ -189,11 +193,11 @@ async def bedrock_stork_agent(message: str, context: dict) -> str:
     """
     from app.librarian.fake_agent import fake_stork_agent
 
-    agent = _get_stork_agent()
+    agent = _create_stork_agent()
     prompt = _build_prompt(message, context, librarian_id="stork")
 
     try:
-        result = agent(prompt)
+        result = await asyncio.to_thread(agent, prompt)
         return _strip_thinking(str(result))
     except Exception as e:
         _log_agent_failure("stork", e)

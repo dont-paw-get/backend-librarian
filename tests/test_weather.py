@@ -211,3 +211,29 @@ class TestOpenMeteoProvider:
             result = await provider.get_weather(37.5665, 126.9780)
 
         assert result.condition == WeatherCondition.RAINY
+
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_get_weather_uses_cache_for_nearby_coords(self):
+        """동일 또는 약 1.1km 이내(소수점 2자리 반올림 일치) 좌표는 캐시를 사용하여 외부 API를 재호출하지 않는다."""
+        mock_response = {
+            "current": {
+                "temperature_2m": 22.5,
+                "weather_code": 0,
+                "precipitation": 0.0,
+            }
+        }
+        route = respx.get("https://api.open-meteo.com/v1/forecast").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
+
+        async with httpx.AsyncClient() as client:
+            provider = OpenMeteoProvider(client=client)
+            # 첫 번째 호출
+            res1 = await provider.get_weather(37.564, 126.974)
+            # 아주 근접한 좌표 (소수점 2자리 반올림 시 37.56, 126.97 로 동일)
+            res2 = await provider.get_weather(37.562, 126.971)
+
+        assert res1 == res2
+        # API는 1회만 호출되어야 함
+        assert route.call_count == 1

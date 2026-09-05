@@ -4,6 +4,7 @@ Open-Meteo API는 무키(API 키 불필요)이며, WMO 날씨 코드를 반환�
 https://open-meteo.com/en/docs
 """
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -148,15 +149,39 @@ def is_valid_coordinates(latitude: float | None, longitude: float | None) -> boo
 
 
 class OpenMeteoProvider(WeatherProvider):
-    """Open-Meteo API 기반 날씨 조회 (무키, 무료)."""
+    """Open-Meteo API 기반 날씨 조회 (무키, 무료, 인메모리 TTL 캐시)."""
 
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
+    CACHE_TTL_SECONDS = 900.0  # 15분
 
     def __init__(self, client: httpx.AsyncClient | None = None):
         self._client = client
+        self._cache: dict[tuple[float, float], tuple[float, WeatherResult]] = {}
+
+    def _get_from_cache(self, key: tuple[float, float]) -> WeatherResult | None:
+        cached = self._cache.get(key)
+        if cached is None:
+            return None
+        cached_time, result = cached
+        if time.time() - cached_time < self.CACHE_TTL_SECONDS:
+            return result
+        del self._cache[key]
+        return None
+
+    def _set_cache(self, key: tuple[float, float], result: WeatherResult) -> None:
+        # 캐시 크기 관리 (간단한 상한 500개)
+        if len(self._cache) > 500:
+            self._cache.clear()
+        self._cache[key] = (time.time(), result)
 
     async def get_weather(self, latitude: float, longitude: float) -> WeatherResult:
-        """Open-Meteo에서 현재 날씨를 조회합니다."""
+        """Open-Meteo에서 현재 날씨를 조회합니다 (소수점 2자리 격자 캐싱)."""
+        # 소수점 2자리 반올림 (약 1.1km 격자)으로 캐시 키 생성
+        cache_key = (round(latitude, 2), round(longitude, 2))
+        cached = self._get_from_cache(cache_key)
+        if cached is not None:
+            return cached
+
         params = {
             "latitude": latitude,
             "longitude": longitude,
@@ -181,8 +206,10 @@ class OpenMeteoProvider(WeatherProvider):
 
         condition, description = resolve_condition(weather_code, precipitation)
 
-        return WeatherResult(
+        result = WeatherResult(
             temperature=temperature,
             condition=condition,
             description=description,
         )
+        self._set_cache(cache_key, result)
+        return result
