@@ -107,17 +107,29 @@ def resolve_condition(
 
 
 # === 메시지 텍스트 → 날씨 감지 ===
-# 사용자가 "비 오는 날 읽을 책"처럼 날씨를 직접 말하면 위치 없이도 반영합니다.
+# 사용자가 "비 오는 날", "날씨 맑음"처럼 날씨를 직접 명시했을 때만 안전하게 감지합니다.
+# 단순 부분 문자열 매칭("비밀", "준비", "눈물")으로 인한 오탐(False Positive)을 엄격히 방지합니다.
 _TEXT_WEATHER_KEYWORDS: list[tuple[str, WeatherCondition]] = [
     ("장마", WeatherCondition.RAINY),
     ("소나기", WeatherCondition.RAINY),
-    ("비", WeatherCondition.RAINY),
-    ("눈", WeatherCondition.SNOWY),
+    ("이슬비", WeatherCondition.RAINY),
+    ("비 오", WeatherCondition.RAINY),
+    ("비가", WeatherCondition.RAINY),
+    ("비는", WeatherCondition.RAINY),
+    ("비도", WeatherCondition.RAINY),
+    ("비와", WeatherCondition.RAINY),
+    ("비 내", WeatherCondition.RAINY),
     ("함박눈", WeatherCondition.SNOWY),
-    ("맑", WeatherCondition.CLEAR),
+    ("눈 오", WeatherCondition.SNOWY),
+    ("눈이", WeatherCondition.SNOWY),
+    ("눈 내", WeatherCondition.SNOWY),
     ("화창", WeatherCondition.CLEAR),
+    ("맑은", WeatherCondition.CLEAR),
+    ("맑음", WeatherCondition.CLEAR),
+    ("맑네", WeatherCondition.CLEAR),
     ("흐린", WeatherCondition.CLOUDY),
     ("흐림", WeatherCondition.CLOUDY),
+    ("흐리", WeatherCondition.CLOUDY),
     ("구름", WeatherCondition.CLOUDY),
     ("안개", WeatherCondition.FOGGY),
     ("폭풍", WeatherCondition.STORMY),
@@ -127,11 +139,53 @@ _TEXT_WEATHER_KEYWORDS: list[tuple[str, WeatherCondition]] = [
 ]
 
 
-def detect_weather_from_text(message: str) -> WeatherCondition | None:
-    """메시지에 날씨 표현이 있으면 WeatherCondition으로 변환합니다.
+# 날씨 관련 질문/의문문 패턴 — 사용자가 날씨를 '단정'한 것이 아니라 '질문'한 것이므로
+# text_stated로 분류하지 않고 실제 실측(API) 데이터를 조회하도록 제외한다.
+# 예: "비 와?", "비 오나요?", "눈 오는지", "날씨 어때?"
+_WEATHER_QUESTION_PATTERNS = (
+    "?",
+    "날씨어때",
+    "날씨어떠",
+    "비와",
+    "비오나",
+    "비오니",
+    "비오냐",
+    "비오나요",
+    "비올까",
+    "비올지",
+    "비오는지",
+    "비내리나",
+    "비내리니",
+    "비내리냐",
+    "비내릴까",
+    "눈오나",
+    "눈오니",
+    "눈오냐",
+    "눈오나요",
+    "눈올까",
+    "눈올지",
+    "눈오는지",
+    "눈내리나",
+    "눈내리니",
+    "눈내리냐",
+    "눈내릴까",
+)
 
-    위치 정보 없이도 사용자가 언급한 날씨를 무드 매핑에 반영하기 위한 용도입니다.
+
+def detect_weather_from_text(message: str) -> WeatherCondition | None:
+    """메시지에 사용자가 직접 명시(단정)한 날씨 표현이 있으면 WeatherCondition으로 변환합니다.
+
+    주의:
+    - '비밀', '준비', '눈치' 같은 무관한 단어의 오탐을 방지합니다.
+    - '비 와?', '눈 오나요?', '오늘 날씨 어때?' 등 의문문/질문은 날씨를 단정한 것이 아니므로
+      None을 반환하여 실제 기상청/Open-Meteo 실측 데이터를 조회하게 합니다.
     """
+    msg_compact = message.replace(" ", "")
+
+    # 질문/의문문 형태인 경우 text_stated 단정 금지
+    if any(q in message or q in msg_compact for q in _WEATHER_QUESTION_PATTERNS):
+        return None
+
     for keyword, condition in _TEXT_WEATHER_KEYWORDS:
         if keyword in message:
             return condition
