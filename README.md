@@ -451,11 +451,24 @@ uv run pytest -q
 | OTEL_TRACES_SAMPLER_ARG | 트레이스 샘플링 비율 (0.0~1.0) | 1.0 |
 | LOG_LEVEL | 루트 로거 레벨 | INFO |
 
-## 관측 가능성 (Observability)
+## 📊 관측 가능성 (Observability)
 
-- **메트릭**: Prometheus (`/actuator/prometheus`) - Spring Boot Micrometer 호환 규격으로 HTTP 요청 지연/에러율 수집
-- **트레이싱**: OpenTelemetry (OTLP) - W3C `traceparent` 헤더 전파로 디스커버리 연동 분산 추적
+- **메트릭**: Prometheus (`/actuator/prometheus`) - Spring Boot Micrometer 호환 규격으로 HTTP 요청 지연/에러율 수집 (`ServiceMonitor` 30초 스크레이핑)
+- **트레이싱**: OpenTelemetry (OTLP) - W3C `traceparent` 헤더 전파로 디스커버리(`backend-discovery`) 연동 분산 추적 (Grafana Tempo)
 - **로깅**: 구조화 JSON 로깅 (Grafana Alloy + Loki 수집, PII 및 LLM 원문 `[REDACTED]` 마스킹)
 
 > 세부 인프라 연동 규격 및 구현 한계점은 [`docs/observability-notes.md`](docs/observability-notes.md)를 참고하세요.
+
+---
+
+## 🚀 CI / CD 파이프라인
+
+- **CI (지속적 통합)**:
+  - `pr-convention-check.yml`: PR 제목/본문 컨벤션(`[CLIAR-XX]`) 자동 검증
+  - 코드 품질 검증: PR 생성 전 `ruff check`, `pytest`를 통한 린트 및 단위 테스트 사전 검증
+- **CD (지속적 배포)**:
+  - `build-push-ecr.yml`: `develop` 브랜치 병합 시 AWS ECR 컨테이너 이미지 자동 빌드 및 푸시
+  - **GitOps 배포**: Kustomize 이미지 태그 자동 갱신 ➔ ArgoCD가 EKS `dev` 네임스페이스에 무중단 롤링 업데이트 배포
+  - **K8s 인프라 연동**: `ServiceMonitor`를 통한 Prometheus 메트릭 자동 수집 및 OTel Collector(4318) 엔드포인트 자동 주입
+
 
