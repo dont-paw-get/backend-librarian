@@ -453,19 +453,9 @@ uv run pytest -q
 
 ## 관측 가능성 (Observability)
 
-### 1. Prometheus 메트릭 (`/actuator/prometheus`)
-- FastAPI 서비스지만 Spring Boot / Micrometer와 **동일한 메트릭 이름·라벨**로 HTTP 요청 수/지연을 노출합니다:
-  - `http_server_requests_seconds_count` / `_sum` / `_bucket`
-  - 라벨: `application`, `method`, `uri`, `status`, `outcome`
-- 클러스터의 Grafana/Prometheus 알림 규칙(Micrometer 규격)이 변경 없이 그대로 적용됩니다.
-- `/health`, `/actuator/prometheus` 등 probe/스크레이핑 경로는 집계에서 자동 제외됩니다.
+- **메트릭**: Prometheus (`/actuator/prometheus`) - Spring Boot Micrometer 호환 규격으로 HTTP 요청 지연/에러율 수집
+- **트레이싱**: OpenTelemetry (OTLP) - W3C `traceparent` 헤더 전파로 디스커버리 연동 분산 추적
+- **로깅**: 구조화 JSON 로깅 (Grafana Alloy + Loki 수집, PII 및 LLM 원문 `[REDACTED]` 마스킹)
 
-### 2. 분산 트레이싱 (OpenTelemetry)
-- `OTEL_EXPORTER_OTLP_ENDPOINT` 설정 시 활성화되며, 미설정 시 로컬 환경에서도 무장애 동작합니다.
-- FastAPI 인바운드와 httpx(Open-Meteo outbound), boto3(Bedrock) 호출이 자동 계측됩니다.
-- httpx 자동 계측을 통해 outbound 요청에 W3C `traceparent` 헤더가 자동 주입되어 `backend-discovery` 등과의 분산 트레이스가 하나로 연결됩니다.
-- Bedrock 호출 및 fake 모드 모두 `librarian.recommendation` 커스텀 스팬을 생성하여 에이전트 처리 지연과 성공 여부를 정밀 추적합니다.
+> 세부 인프라 연동 규격 및 구현 한계점은 [`docs/observability-notes.md`](docs/observability-notes.md)를 참고하세요.
 
-### 3. 구조화 로깅 및 보안 마스킹 (JSON Logging)
-- 로그는 stdout으로 JSON 포맷(`timestamp`, `level`, `service`, `message`, `trace_id`, `span_id`)으로 출력되며, Grafana Alloy가 수집하여 Loki로 전송합니다.
-- 사용자 입력 메시지 원문 및 Strands Agent 프롬프트/응답은 개인정보 및 보안을 위해 강제 마스킹(`[REDACTED]`) 처리됩니다.
