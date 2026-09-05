@@ -108,6 +108,38 @@ flowchart TD
 3. **`signals` 응답 100% 보장**:
    * 두 사서 모두 날씨 프로바이더를 경유하여 계산된 `weather`, `time_of_day`, `mood`, `genre_focus`를 패키징하여 오케스트레이터의 도서 검색 및 프론트엔드의 `WeatherMoodBadge` 뱃지로 온전히 전달.
 
+### 3.1 오케스트레이터(Discovery) 통합용 Mermaid 서브그래프 가이드
+
+디스커버리 레포지토리나 AI 어시스턴트(agy)가 전체 서비스 토폴로지를 단일 Mermaid 다이어그램으로 시각화할 때, 아래의 `subgraph LibrarianRepo` 코드 블록을 그대로 포함하여 레포 경계 및 내부 에이전트를 구분할 수 있습니다:
+
+```mermaid
+subgraph LibrarianRepo["📦 backend-librarian (사서 서비스)"]
+    direction TB
+    L_API["FastAPI Entrypoint (/api/v1/chat)"]
+    
+    subgraph Librarians["사서 페르소나 에이전트군"]
+        direction LR
+        Cat["🐱 블루 (고양이 사서)<br/>• ID: cat<br/>• 특화: 추리 / 미스터리 / 스릴러"]
+        Stork["🪿 슈빌 (황새 사서)<br/>• ID: stork<br/>• 특화: 비즈니스 / 경제 / 커리어"]
+    end
+
+    subgraph InternalEngine["큐레이션 엔진 & 도구"]
+        Weather["Open-Meteo Weather API"]
+        Mood["Time & Mood Mapper"]
+        Safety["Switch Safety Net (전환 감지)"]
+    end
+
+    L_API --> Safety
+    Safety --> Librarians
+    L_API --> Weather --> Mood
+end
+
+%% 디스커버리 오케스트레이터와의 인터페이스 연결 가이드 (Discovery 측에서 합성)
+%% DiscoveryOrchestrator -->|HTTP POST /api/v1/chat| L_API
+%% Cat -.->|switch_to: stork 제안| DiscoveryOrchestrator
+%% Stork -.->|switch_to: cat 제안| DiscoveryOrchestrator
+```
+
 ---
 
 ## 4. 연동 시 문제 해결 가이드 (Troubleshooting)
